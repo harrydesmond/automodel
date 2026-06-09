@@ -36,7 +36,7 @@ The final model should remain interpretable and produce non-negative outputs.
 
 An existing model is optional. If none exists, the skill creates a baseline before starting the structural search.
 
-## 🤲 What you provide
+## 👉 What you provide
 
 | Input                      | Required? | Examples                                                        |
 | -------------------------- | --------- | --------------------------------------------------------------- |
@@ -48,7 +48,7 @@ An existing model is optional. If none exists, the skill creates a baseline befo
 
 The agent confirms the data split, metrics, parameter optimization routine, runtime, and memory budget before beginning the search.
 
-## 📦 What you get
+## 👈 What you get
 
 | Artifact                                 | Purpose                                                               |
 | ---------------------------------------- | --------------------------------------------------------------------- |
@@ -88,18 +88,6 @@ The skill is organized into four sequential phases. The agent uses each recipe's
 | **4 - [Finalize](automodel/assets/phases/4_finalize.md)** | Evaluate the best model on the held-out test set, decide whether to return to iteration or accept it, and record the outcome. | User is satisfied with validation performance and `CONTEXT.md` points to the best model |
 
 The agent is asked to read only the YAML frontmatter of a phase file to confirm the right phase before loading the full recipe.
-
-## 🎯 Where it fits
-
-| Good fit                                             | Poor fit                                                  |
-| ---------------------------------------------------- | --------------------------------------------------------- |
-| Symbolic regression and equation discovery           | Tasks without an objective evaluation metric              |
-| Feature and functional-form discovery                | Parameter tuning with a fixed model structure             |
-| Small or contained neural architecture changes       | Models that cannot be trained and evaluated autonomously  |
-| Models that can be represented and modified in files | Workflows requiring substantial manual or GUI interaction |
-| Problems with a reproducible evaluation routine      | Searches whose compute cost cannot be bounded             |
-
-The skill can apply across domains, but the model must be evaluable by code and the structural search must fit within the available agent and compute budget.
 
 ## 📈 Example outcome
 
