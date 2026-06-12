@@ -11,8 +11,8 @@
 
 `automodel` is an agent **skill** for building or improving models from data. It searches for better model **structures** by transforming input features, introducing equation terms, or modifying neural network layers.
 
-This skill takes inspiration from [Karpathy's autoresearch](https://github.com/karpathy/autoresearch), but generalizes the approach to guide users through domain-agnostic searches for model structures, potentially starting from data alone. It is intentionally minimal and flexible.
-For more comprehensive model and program discovery approaches, consider [OpenEvolve](https://github.com/algorithmicsuperintelligence/openevolve), [ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve), [SkyDiscover](https://github.com/skydiscover-ai/skydiscover), etc.
+This skill takes inspiration from [Karpathy's autoresearch](https://github.com/karpathy/autoresearch), but generalizes the approach to guide users through domain-agnostic searches for model structures, potentially starting from data alone. It is intentionally *minimal and flexible*.
+For more robust and scalable model and program discovery approaches, consider [OpenEvolve](https://github.com/algorithmicsuperintelligence/openevolve), [ShinkaEvolve](https://github.com/SakanaAI/ShinkaEvolve), [SkyDiscover](https://github.com/skydiscover-ai/skydiscover), etc.
 
 > 🚧 `automodel` is under construction and experimental. Use at your own risk.
 
