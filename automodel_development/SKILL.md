@@ -30,7 +30,8 @@ sub-agents.
 - **One plan, approved before anything costly runs.** Decisions live in `RUN_PLAN.md` (template
   `assets/RUN_PLAN.md`), each marked **[user chose]**, **[delegated]** (the user, or a standing instruction such as a
   project memory, left it to you) or **[proposed]**. Resolve every [proposed] item that changes the objective, the
-  permitted work or the budget before approval. A light search approves one compact plan once; a heavy one approves
+  permitted work or the budget before approval. A general "your choice" does not delegate a gate or requirement that
+  changes which known references are eligible: propose it and show its effect. A light search approves one compact plan once; a heavy one approves
   setup first and the search after Phase 2's calibration. Later, ask again only for a change of objective or protocol,
   work outside the delegated scope, or a material budget increase.
 - **No silent defaults.** If a question is skipped, interrupted or only partly answered, ask the open part again or

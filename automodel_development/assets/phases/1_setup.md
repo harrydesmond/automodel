@@ -44,7 +44,8 @@ replication).
   - Hybrid (held-out error plus a penalty): set the penalty against the noise of the held-out score.
 - **Read back the operative rule** in one sentence — "Among candidates satisfying [hard requirements over their
   domain], rank by [score and direction]; [other checks] are reported only" — and show how one known reference is
-  ranked or rejected under it (compute its score if an evaluation takes seconds). Changes to this rule later are
+  ranked or rejected under it (compute its score if an evaluation takes seconds), and say which known references the
+  gates exclude (e.g. "the best published form is ineligible under this rule"). Changes to this rule later are
   protocol changes (new version, rescoring).
 
 ## 4. Splits and external evidence
