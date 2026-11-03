@@ -1,5 +1,5 @@
 # Prints the YAML frontmatter of every phase file in assets/phases/.
-# Run from the automodel/ directory:
+# Run from anywhere:
 #   pwsh scripts/read_phases.ps1
 
 $phasesDir = Join-Path $PSScriptRoot "..\assets\phases"

@@ -1,37 +1,33 @@
 ---
 name: finalize
-description: Fourth and final phase. Evaluate the best model against the external check agreed in Phase 1, decide whether to return to Iterate or accept results, and record the final outcome in CONTEXT.md.
-entry: User satisfied with the selection score; CONTEXT.md has pointer to best model
-exit: CONTEXT.md updated with final decision, test metrics, and key handoff details.
+entry: The search ended (stop rule, budget, or the user accepted or stopped it); CONTEXT.md points to the best eligible candidate.
+exit: Outcome, metrics, limitations and job status recorded in CONTEXT.md.
+description: Fourth and final phase. Pre-register, apply the agreed external check to an authorised frozen candidate, decide, and record the outcome, including exploratory or unsuccessful ones.
 ---
 
 # Phase 4 — Finalize
 
----
+## 1. Pre-register (if there is an external check)
+Before it, record (and commit, under version control) the candidates to test, the baseline treated the
+same way, the decision rule and the claims. If a final refit frees constants or changes structure, validate the result
+before the check: the model tested must be the model selected.
 
-## Steps
+## 2. External check
+Apply the agreed check to the authorised frozen candidate(s): the held-out set, independent data, or out-of-range
+constraints, reporting all agreed metrics including runtime and memory. Without an agreed check, refit and rescore the
+winner from scratch and state that its score is optimistic because of the search. A reserved dataset not used for an
+authorised candidate stays sealed.
 
-### 1. Restore context
-Read `CONTEXT.md` to identify the best model path and its selection score.
+## 3. Decide
+- Validation-to-test shrinkage is normal; agreement shows consistency, not absence of selection bias.
+- If the check is much worse than the search suggested and the user returns to Phase 3, do not reuse the same check:
+  each look erodes its independence. Advise fresh data or a fresh check.
+- After a data or evaluator correction: keep the original results, record the change, recheck the frozen candidates
+  and the reference under the same rule and label the check as reused. Structures or rules chosen from those outcomes
+  need fresh independent evidence, or are reported as exploratory.
 
-### 2. Pre-register
-Before the external check, record the models to be tested, the decision rule and the claims (commit them if the project
-is under version control); see the Finalize section of `assets/checks.md` for claim stress tests and audits that may
-apply.
-
-### 3. Final evaluation
-Apply the external check agreed in Phase 1: evaluate the best model on `test.X`, or run the agreed alternative (replication on an independent dataset, or the constraints the form must satisfy outside the fitted range). If the user agreed to none, re-verify the selected model from scratch (refit and score) and state in the outcome that its score is optimistically biased by the search. Report all metrics defined in Phase 1 (including run-time and memory).
-
-### 4. Decide
-- If the check comes out significantly worse than the search suggested: discuss with the user whether to return to Phase 3 — Iterate. **If you do, do not keep re-using the same check** — each repeated peek erodes its independence and reintroduces the overfitting it was meant to catch. Advise the user to obtain fresh data, or a fresh check, before iterating further.
-- If the check is acceptable: finalize.
-
-## Context dump (end of phase)
-
-Complete the Phase 4 — Finalize section of `CONTEXT.md` with:
-- Final decision and selected model path;
-- Concise usage entry point;
-- Final validation and test metrics, including runtime and memory;
-- Interpretation of the validation-to-test difference;
-- Acceptance-criteria results;
-- Most important limitations.
+## 4. Record
+In `CONTEXT.md`: decision (accept / exploratory result / no useful improvement / do not use), selected model and usage
+entry point, validation and external metrics, interpretation of the difference, which claims were checked on what
+(sampled accuracy is not a region-wide guarantee), main limitations, and confirmation that no job or process is left
+running. See `assets/checks.md`, Finalize, for stress tests and audits that may apply.

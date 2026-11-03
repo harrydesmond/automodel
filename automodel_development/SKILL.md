@@ -5,70 +5,50 @@ license: Apache-2.0
 ---
 
 # automodel
-A structured guide to discovering models from data with agents.
-Focuses on the structure of the model (be it equation terms or neural network layers) rather than just parameter values, using an iterative meta/inner agent loop to explore structural modifications in parallel. Applies to a wide range of tasks, from simple regression to complex physical systems, from automotive to pharmacology.
+Discover the structure of a model (equation terms, features, layers) from data with a meta-agent and parallel
+sub-agents.
 
 ## Phases
 
-This skill is organized into four sequential phases, each with a detailed recipe in `assets/phases/`:
-
-| Phase | Recipe | Entry signal |
+| Phase | Recipe | Done when |
 |---|---|---|
-| **1 — Setup** | `assets/phases/1_setup.md` | No `CONTEXT.md` artifact in project root |
-| **2 — Baseline Model** | `assets/phases/2_baseline_model.md` | `CONTEXT.md` exists; Some prep work done; |
-| **3 — Iterate** | `assets/phases/3_iterate.md` | End-to-end pipeline verified for baseline model (resume from the highest existing `meta_*/` directory) |
-| **4 — Finalize** | `assets/phases/4_finalize.md` | User satisfied with the selection score; `CONTEXT.md` points to best model |
+| **1 — Setup** | `assets/phases/1_setup.md` | Plan approved (`RUN_PLAN.md`); evaluator and data ready |
+| **2 — Baseline** | `assets/phases/2_baseline_model.md` | Harness tested end to end; baseline and references scored |
+| **3 — Iterate** | `assets/phases/3_iterate.md` | Stop rule, budget or the user ends the search |
+| **4 — Finalize** | `assets/phases/4_finalize.md` | Outcome recorded (an unsuccessful search is a valid outcome) |
 
-Each phase updates `CONTEXT.md`. Use the resulting artifacts as re-entry signals when resuming.
-
-## How to start
-
-1. Copy `assets/CHECKLIST.md` to the project root (if not already present) and update it as you go.
-2. Detect the current phase using the entry signals above. If a checklist with partial progress is already present, ask the user whether to resume.
-3. Read **only the frontmatter** of all phase files to confirm which one applies — do not load the full recipes yet:
-   ```bash
-   # bash / zsh
-   bash scripts/read_phases.sh
-   ```
-   ```powershell
-   # PowerShell
-   pwsh scripts/read_phases.ps1
-   ```
-   The frontmatter `entry`, `exit`, and `description` fields are sufficient to identify the applicable phase without loading full recipes into context.
-4. Once the applicable phase is confirmed, load and follow its full recipe (`assets/phases/<N>_<name>.md`).
+## How to start or resume
+1. If the project has no `CONTEXT.md`, start Phase 1 (copy `assets/CHECKLIST.md` to the project root; Phase 1
+   creates `CONTEXT.md`).
+2. Otherwise read its status block (phase, step, active meta-iteration, protocol version, budget, pending jobs, next
+   action), check that the files it points to exist and validate, and resume the first incomplete step. A directory's
+   existence is not completion. If the status is unclear, `bash <skill>/scripts/read_phases.sh` prints each phase's
+   entry and exit conditions.
+3. Load only the current phase's recipe; it says which supporting file to read and when.
 
 ## Working with the user
-
-- **Approve before running.** All decisions are collected in `RUN_PLAN.md` (template `assets/RUN_PLAN.md`), each
-  marked as the user's choice or your assumption. The user approves its setup part at the end of Phase 1 and the
-  whole plan before the first search launch; nothing costly runs before approval.
-- **No silent defaults.** If a question is skipped, interrupted or only partly answered, ask the open parts again or
-  list them in the plan as `[assumed: …]` for approval. Do not settle them yourself without showing it.
-- **Progress is visible.** After every meta-iteration send a short progress message; pause for the user's review if
-  the plan says so (default: light searches continue, heavy searches pause).
+- **One plan, approved before anything costly runs.** Decisions live in `RUN_PLAN.md` (template
+  `assets/RUN_PLAN.md`), each marked **[user chose]**, **[delegated]** (the user, or a standing instruction such as a
+  project memory, left it to you) or **[proposed]**. Resolve every [proposed] item that changes the objective, the
+  permitted work or the budget before approval. A light search approves one compact plan once; a heavy one approves
+  setup first and the search after Phase 2's calibration. Later, ask again only for a change of objective or protocol,
+  work outside the delegated scope, or a material budget increase.
+- **No silent defaults.** If a question is skipped, interrupted or only partly answered, ask the open part again or
+  show your choice in the plan as [proposed]; never settle it unseen.
+- **Visible progress.** Report before each launch, during long phases, and after every meta-iteration; pause there for
+  the user's review if the plan says so (default: light searches continue, heavy searches pause). A stop request takes
+  effect before any further submission.
 
 ## Search size
-
-Phase 1 classifies the search as **light** (evaluations of seconds; sub-agents in the session, minimal resource
-planning) or **heavy** (evaluations of minutes to hours, or a large share of the user's allowance; model tiers, a usage
-log, and *hybrid* orchestration: the session's meta-agent launches detached worker sessions, one fresh session per
-attempt, and reviews their results without supervising attempts). See `assets/resources.md` §1.
+Phase 1 classifies the search as light (in-session agents, one compact plan) or heavy (two-step approval, usage
+accounting, detached workers when evaluations are long); see `assets/resources.md` §1.
 
 ## Supporting files
-
-- `assets/resources.md`: search size, orchestration, waiting and context rules, models and effort, cost estimates,
-  usage log, re-planning between meta-iterations.
-- `assets/frameworks.md`: per-framework mechanics (Claude Code, Codex, other): models and effort, sub-agents, detached
-  workers, wait primitives, usage signals.
-- `assets/checks.md`: a menu of checks per phase; each phase picks what fits by cost and stakes.
-- `scripts/launch_workers.sh`, `scripts/worker_status.sh`: hybrid workers and their one-screen status;
-  `scripts/usage_report.py`: per-session usage from the frameworks' own logs. All scripts live in this skill's folder
-  (`<skill>/scripts/…`) and are run from the project root.
-
-## References
-
-The user may place relevant papers, code snippets, or other resources in a `references/` folder in the project root (not in this skill's folder, which is shared by all projects) — check them only when prompted to do so within a particular phase, and refer back / review with the user as needed.
-
-## Optional tips
-
-`TIPS.md` collects optional, use-case-dependent practices (metric uncertainty, optimizer-noise controls, a leaderboard, trivial baselines) kept out of the core recipes because their relevance varies by domain. Consult it — or fold relevant items into your fork — as needed.
+- `assets/RUN_PLAN.md`: plan template. `assets/checks.md`: required evaluator checks and a menu of conditional ones.
+- `assets/resources.md`: size, orchestration, waiting, models, budgets, usage accounting, re-planning.
+- `assets/frameworks.md`: Claude Code and Codex mechanics (sub-agents, detached workers, waits, permissions, usage).
+- `<skill>/scripts/`: `launch_workers.sh` and `worker_status.sh` (detached workers, run from the project root),
+  `usage_report.py` (token usage from local session logs), `tests/run_tests.sh` (their fixture tests).
+- `TIPS.md`: optional practices (uncertainty, leaderboards, trivial baselines).
+- References: the user may put papers, code or earlier results in the project's `references/` folder (never in this
+  skill's folder, which every project shares); phases say when to read them.

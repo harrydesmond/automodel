@@ -1,114 +1,91 @@
-# Resources: search size, orchestration, models and usage
+# Resources: size, orchestration, waiting, models, budget and usage
 
-How to organise the agents, wait for evaluations, choose models and effort, estimate what a meta-iteration costs, and
-re-plan from what it actually cost. `<skill>` below is this skill's folder; scripts are run from the project root.
+`<skill>` is this skill's folder; its scripts are run from the project root.
 
 ## 1. Search size
 | | light | heavy |
 |---|---|---|
-| when | evaluations ≤ ~1 min; the search is small next to the user's allowance | evaluations of minutes to hours (queued jobs), or usage that could approach the allowance |
-| orchestration | in-session sub-agents (§2a) | hybrid (§2b) |
-| models | the session's model, or one model for all sub-agents | per direction class (§4) |
-| estimate | one line: "S×I attempts on <model>; about <share> of your window; ~<wall time>" | §5 |
-| usage record | one line per meta-iteration in `CONTEXT.md` | usage log (§6) |
-| between meta-iterations | progress message, then continue | progress message, then pause for the user's review |
+| when | evaluations of seconds; the search is a small share of the user's allowance | evaluations of minutes to hours or queued, or usage that could approach the allowance |
+| plan | compact plan, approved once | part A (setup), then part B after calibration |
+| orchestration | in-session sub-agents | detached workers (§2) when evaluations are long; otherwise in-session |
+| models | the session's model, or one model for all agents | options per direction (§4) |
+| usage record | one line per meta-iteration | usage log (§6) |
+| between meta-iterations | progress message, continue | progress message, pause for review |
 
-If unsure, start light and switch at a boundary when the first meta-iteration's usage or wall time says so.
+Keep budget, evaluation latency and stakes apart: a million cheap evaluations can be costly without needing detached
+workers, and one slow evaluation may need a watcher but no model planning. If unsure, start light and switch at a
+boundary when measurements say so.
 
 ## 2. Orchestration
-**(a) In-session sub-agents.** The meta-agent launches the S sub-agents in parallel with the framework's sub-agent tool,
-waits for their completion notices, and reviews. Simple and supervised, but every wake-up of an agent re-reads its own
-growing context, so it suits cheap evaluations. Keep one session per agent for the I attempts of a meta-iteration (with second-long evaluations, fresh sessions per
-attempt would spend more re-reading the brief than they save), but start fresh agents for each meta-iteration, with
-the review's seeds and findings as their brief: agents carried across meta-iterations accumulate large contexts.
+**In-session sub-agents.** The meta-agent launches the agents with the framework's sub-agent tool and reviews when
+their completion notices arrive. Each wake-up of an agent re-reads its own growing context, so give each agent one
+session per meta-iteration and fresh agents for the next one, briefed by the review.
 
-**(b) Hybrid: the default for heavy searches.** The meta-agent stays in the user's session but does not supervise
-attempts:
-1. Write the meta-iteration's files: `meta_m/COMMON_PROMPT.md` (shared protocol: how to fit, evaluate and wait; what
-   an attempt must leave on disk; the `summary.md` specification; scope limits), `meta_m/agent_s/DIRECTION.md`
-   (seed, direction, class) and `meta_m/agents.conf` (agent, CLI, model, effort, attempts; format in the header of
-   `<skill>/scripts/launch_workers.sh`).
-2. Run preflights (each seed reproduces its score through the shared harness), get the user's approval for unattended
-   workers (they run with permission prompts off), then launch `setsid nohup <skill>/scripts/launch_workers.sh meta_m
-   > meta_m/launch.log 2>&1 < /dev/null &`. For each agent the launcher runs one fresh non-interactive session per
-   attempt, then a summary session. All state is on disk, so re-running it after any stop (usage limit, crash, reboot)
-   continues where it stopped.
-3. Check once after ~20 min (every agent has a plan and a running or finished first evaluation), then wait in long
-   steps (60–90 min, or about one attempt's duration), each followed only by `<skill>/scripts/worker_status.sh
-   meta_m`. Do not
-   read agent files or run side analyses while waiting.
-4. When all agents have finished, review in the same thread (Phase 3 step 3).
+**Detached workers (hybrid; default for long evaluations).** The meta-agent stays in the user's session and does not
+supervise attempts:
+1. Write `meta_m/COMMON_PROMPT.md` (harness, decision rule, budget, how to wait, what an attempt leaves on disk,
+   the `summary.md` specification, scope limits), `meta_m/agent_s/DIRECTION.md`, `meta_m/agents.conf` and the
+   harness's validator `meta_m/done_attempt.sh` (formats in the header of `<skill>/scripts/launch_workers.sh`).
+2. Agree the workers' permissions with the user: write roots, network and compute access, the least the runtime
+   supports. Needing the network is not a reason to drop every boundary. The launcher needs bash ≥ 4, `pgrep` and
+   `setsid` (Linux; on macOS install a newer bash). If the approved configuration is unavailable, run in-session or
+   sequentially instead.
+3. Launch `setsid nohup <skill>/scripts/launch_workers.sh meta_m > meta_m/launch.log 2>&1 < /dev/null &`. Each attempt
+   is a fresh non-interactive session; memory between attempts is the agent's `notes.md` (≤ 300 words) and
+   `exchange.md` lists components others may import. The launcher retries incomplete sessions a bounded number of
+   times, refuses to start an agent another live process owns, stops all its workers if it receives TERM or INT, and
+   starts no new session once `meta_m/STOP` exists. After a hard kill or a crash, check for orphaned worker processes
+   and reconcile recorded jobs (harvest a known job; never
+   resubmit one whose receipt is uncertain without checking) before re-running it. A scheduler's "completed" is not
+   success: the validator decides.
+4. Watch without spending model calls: `<skill>/scripts/worker_status.sh meta_m --wait <s>` returns when the launcher
+   exits or a failure is logged (in Claude Code run it in the background; its completion notice wakes the session;
+   in Codex, wait with the sleep tool for a time chosen from the observed attempt durations, then run it once).
+   Report progress at the agreed cadence; review when all agents finish.
 
-In this mode each attempt starts with a fresh, small context. Memory between attempts is the agent's `notes.md`
-(≤ 300 words: current best, what worked, queue of next hypotheses). Its `exchange.md` lists components the other agents
-may import, which is enough for recombination within a meta-iteration. An optional `meta_m/after_agent.sh` (e.g. a
-refit of the agent's best attempt for the review) runs while slower agents finish.
+## 3. Waiting and context rules (for prompts and COMMON_PROMPT.md)
+Input volume ≈ model calls × context per call, and it usually dominates; output is far smaller (though priced higher).
+- Never poll at short intervals. Wait for a long command with one blocking wait matched to its expected remaining
+  duration and the delay you can tolerate in noticing it, then one short status check; prefer completion
+  notifications. This applies to screens and checks too.
+- Long outputs go to files; print tails (≤ ~40 lines). The harness's record and card replace hand-written tables.
+  Keep prose short: plan ≤ 150 words, rationale ≤ 200, `summary.md` ≤ 800, final reply a few lines.
+- Stay within the direction and the budget; no side audits or score-only reruns. If reproduction, provenance or
+  scoring contradicts the plan, stop the affected comparison, send one short blocker with the evidence, and run only
+  the smallest diagnostic needed.
+- An evaluation is finished and recorded before its session ends, or leaves `attempt_i/.job` saying how to harvest it.
 
-(If the user prefers not to keep a session open, they can start a fresh session for the review instead.)
+## 4. Models and effort
+Start with the session's model and the simplest execution path. Offer other allocations as options to test, with
+their estimated cost and uncertainty, when measured cost or quality warrants it: e.g. a cheaper model for mechanical
+directions (convergence refits, speed-ups at fixed accuracy, fixed-protocol measurements), the strongest model for
+directions that must diagnose failures and overturn their own brief, or fewer agents at a higher level. Name concrete
+models (`frameworks.md`), not tiers. None of these allocations has been compared under controlled conditions.
 
-## 3. Waiting and context rules
-Usage ≈ model calls × context length; output (the thinking and writing) is a small share. Put the relevant rules in
-the sub-agent prompts or `COMMON_PROMPT.md`; for a light search only the output and prose rules matter:
-- Never poll at short intervals. Wait for a long command (any long command: screens and checks included, not only
-  scored fits) with one blocking wait matched to its expected duration (from the previous evaluation's duration and the
-  time already elapsed), then run one short status check. Use the framework's wait primitives (`frameworks.md`).
-- Waits much longer than the evaluation add wall time: the gap between a job finishing and the agent noticing is part
-  of every attempt.
-- Send long outputs to files and print tails (≤ ~40 lines). A metrics card written by the shared harness (`card.md`,
-  first line a one-line summary) replaces hand-written tables. Cap the prose: plan ≤ 150 words, `evaluation.md` ≤ 200
-  words of the agent's own beyond the card, `summary.md` ≤ 800 words, final reply a few lines pointing to files.
-- Sub-agents message the meta-agent only when blocked, briefly. No audits, score-only reruns or side analyses unless the
-  direction asks for them; state scope limits explicitly, because some models inflate the process otherwise.
-- An attempt's evaluation finishes and is written up before its session ends. A job that outlives a session (usage
-  stop, crash) leaves `attempt_i/.job` saying how to harvest it; the next session harvests it and never resubmits.
-- The meta-agent's cost is its wake-ups, not its output: high (not maximum) effort is enough.
+## 5. Budget and estimates
+- The approved evaluation budget (screens and scored fits per attempt; run-wide fit, wall-time and compute caps,
+  counting baselines, failures, refits and recombinations) is enforced by the harness, not only estimated.
+- Estimate from a representative scored attempt (proposal, screening, queue, fitting, harvesting) plus setup and
+  review; name what is unmeasured, and update after the first meta-iteration.
+- Usage ≈ S × I × usage per attempt + the meta-agent. Wall time ≈ the slowest agent's chain: I × (agent work + queue +
+  evaluation + time to notice) + review. Compute ≈ evaluations × cost. Parallelism (agents, or variants per attempt
+  evaluated together) buys progress per hour with usage and compute; sequence costs wall time.
+- Do not convert tokens into a share of an allowance or into money without the user's reading or prices.
+- One uncontrolled observation (~10-min cluster evaluations): worker input per attempt fell from 14.2 M tokens
+  (in-session, waiting meta-agent, 1-min polling) to ~3–4 M with detached per-attempt workers, and the meta-agent's
+  share from 22% to ~4%; other settings changed too. A reason to measure, not a forecast.
 
-## 4. Models per direction (heavy searches)
-| class | the agent must… | default |
-|---|---|---|
-| diagnostic | find why something fails, invent new structure, overturn its own brief when the evidence says so | strong tier, high effort (top tier if it is the bottleneck and the budget allows) |
-| integration | recombine parts from several agents, recover accuracy, satisfy constraints or interpretability tests | strong tier, high effort |
-| mechanical | speed-ups at fixed accuracy, pruning, convergence refits, fixed-protocol measurements | economy tier, or strong tier at lower effort |
-
-The meta-agent runs on the top tier; its reviews, seeds and recombinations steer every attempt. When the budget binds,
-reduce S (merge or drop directions) or I before downgrading every agent: compute does not depend on the model, and an
-agent that screens well wastes fewer expensive fits. These defaults are judgement; let the usage log (§6–7) replace
-them.
-
-## 5. Estimate the cost
-- **Per attempt:** first from the Phase 2 test sub-agent (a scored attempt costs several times the pipeline test), later
-  from the usage log. With neither, say the estimate is a guess.
-- **Usage** ≈ S × I × usage per attempt, plus the meta-agent: a sizeable share if it waits on in-session agents
-  through long evaluations, little in hybrid mode. Batch proposals: one proposal call per agent per round, plus the
-  meta-agent's central fitting and review, which usually dominate. Several parallel agents can exhaust a subscription window within a few attempts each; plan for limit
-  stops (hybrid workers resume by themselves).
-- **Wall time** ≈ the slowest agent's chain: I × (agent work + queue + evaluation + noticing latency), plus the review.
-  Cutting usage does not cut wall time unless it removes steps from the chain.
-- **Compute** ≈ evaluations (screens included) × time per evaluation × cores.
-- **Levers.** Parallelism (more agents, or several variants per attempt evaluated together) buys progress per hour with
-  usage and compute; more sequential attempts cost wall time. Long waits save usage and add latency. Fresh sessions per
-  attempt cut context when evaluations take minutes or more.
-- For orientation, from one heavy run (evaluations ~10 min on a cluster): moving from in-session agents with a
-  waiting meta-agent and 1-min polling to hybrid workers with long waits cut usage per attempt 4.6× (2.3× fewer calls ×
-  2.1× smaller contexts) and wall time 2×, with no loss of gain per meta-iteration.
-
-## 6. Offer the choice and log usage
-- **Choice (in `RUN_PLAN.md` part B; again at a boundary if anything moved).** Heavy: ask the user's limits or
-  priorities on usage, wall time and compute (they change during a run), then present M (or a stop rule), S, I and R
-  together, where R = orchestration, model and effort per class, and wait settings: a recommendation with its
-  evidence and two or three alternatives (e.g. fewer agents at a higher tier; economy tier for mechanical
-  directions), each with §5's estimates. Light: one estimate line.
-- **Log (heavy).** At each review, run `<skill>/scripts/usage_report.py <claude|codex> --cwd . --since <launch time,
-  UTC>` (it reads the session logs, one JSON line per session) into `meta_m/usage_log.jsonl`, and add per agent: class, model, effort, attempts scored and wasted (failed, abandoned),
-  wall time split into agent work / queue / evaluation / latency, limit stops, best gain vs seed, and whether the agent
-  overturned its brief. Put a summary line in `CONTEXT.md`: totals, usage per scored attempt, allowance used vs planned
-  (ask the user for the framework's usage reading), wall time, compute.
+## 6. Usage log (heavy)
+`launch_workers.sh` writes `meta_m/launch_manifest.jsonl` (agent, session label, model, effort, start/end). At each
+review run `python3 <skill>/scripts/usage_report.py <claude|codex> --cwd <project> --since <launch> --until <now>` into
+`meta_m/usage_log.jsonl` (times in UTC, e.g. the first `time` in `launch_manifest.jsonl`): it counts usage events inside the window (a meta-agent session that began earlier is
+included for its in-window calls only), separates uncached input, cache reads/writes and output, and tags workers by
+their launch prompt. "Input after waits" is a heuristic. Add per agent: proposals, screens, scored fits, attempts validated and quarantined, gain over its seed, wall time. Summary line in `CONTEXT.md`; mark allowance readings unknown unless the user
+supplies them.
 
 ## 7. Re-plan at every boundary
-Re-choose S, I and R from the last meta-iteration rather than repeating them. Drop or merge directions that gained
-nothing or turned out to be limited by something else; diagnose a failing region or gate before assigning a direction
-to it. Upgrade directions whose agent stalled, downgrade those a cheaper allocation handled, and treat high usage with
-many wasted fits as a call for better screening instructions, not a bigger model. Apply the stop rule. Report the new
-plan and its reason in the meta-iteration summary, and re-ask the user only if the estimate moved materially, the
-allocation changes, or the budget binds; with pauses on, the
-user reviews it anyway.
+Re-choose directions, S, I and allocations from the last meta-iteration. Retire a direction when the evidence says its
+premise is wrong or another component limits it, not merely because one round gained nothing; keep a bounded share
+for distinct untested hypotheses, and record why each direction continues, merges or stops. Treat many wasted fits as
+a call for better screening instructions, not a bigger model. Report the new plan in the progress message; ask the
+user only for changes outside the delegated scope or a material budget increase.

@@ -1,6 +1,6 @@
 # automodel — optional tips
 
-These are practices that can sharpen an `automodel` search but are **deliberately not baked into the core recipes**, because their relevance and best implementation are use-case-dependent. Treat them as a menu: raise them with the agent during a run, or fold the useful ones into your own fork of the skill.
+Optional practices; adopt them where they fit the problem.
 
 ---
 
@@ -11,17 +11,12 @@ The meta-agent selects the "best" model from point estimates, but a validation-m
 - Report an error bar on the validation metric — via bootstrap resampling of the validation set, or the spread across cross-validation folds.
 - Or run a paired test on per-example residuals between the candidate and the best-so-far, so a change is kept only when the improvement is robust rather than within noise.
 
+Keep the sources of variation apart: fitting, sampling and adaptive selection. Paired resampling for fixed
+candidates measures conditional uncertainty; it does not repeat the search or remove its selection optimism (which
+can also overfit cross-validation). Respect groups and time order when resampling. When a claim needs that evidence,
+use an untouched check or repeat the whole selection inside an outer evaluation.
+
 This is the cheapest guard against the search chasing noise. The right method is domain-specific (a Poisson-count likelihood, a classification metric, and an ODE misfit each call for different tests), which is why it is not prescribed in the core.
-
-## Control optimizer noise
-
-A good *structure* can score badly purely because its parameter fit failed to converge (bad init, poor scaling), making structural gains indistinguishable from optimizer luck. Phase 2 checks convergence for the baseline; carry the same discipline into the search:
-
-- Fix and **log the random seed(s)** for each fit so runs are reproducible.
-- Run a few optimizer restarts per candidate (multi-start, or a global method such as basin-hopping / differential evolution for stiff landscapes) and keep the best.
-- Record a convergence diagnostic and flag non-converged fits, so they are not compared as if trustworthy.
-
-Note that expensive global optimizers can dominate per-candidate cost and blow the loop budget estimated in Phase 3 — size the search accordingly.
 
 ## Leaderboard
 

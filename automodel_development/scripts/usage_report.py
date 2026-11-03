@@ -1,158 +1,215 @@
-"""Per-agent token usage of a meta-iteration, read from the framework's own session logs (no API access needed).
+#!/usr/bin/env python3
+"""Token usage per session over a time window, read from the frameworks' own local session logs (no API access).
 
     python usage_report.py codex  --cwd <project dir> --since 2026-11-01T10:00 [--until ...]
-    python usage_report.py claude --cwd <project dir> --since 2026-11-01T10:00 [--until ...]   (all sessions, workers too)
-    python usage_report.py claude --session ~/.claude/projects/<proj>/<session-id>.jsonl [--match "meta_3 agent"]
+    python usage_report.py claude --cwd <project dir> --since 2026-11-01T10:00 [--until ...]
+    python usage_report.py codex|claude --session <session file> [--since ...]
 
-Codex: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl (token_count events; turn_context gives model/effort;
-session_meta.source.subagent marks sub-agents). Claude Code: <session>.jsonl plus <session>/subagents/agent-*.jsonl
-(message.usage; .meta.json holds the sub-agent description). For each thread: model calls, input tokens (cached part),
-output tokens, median context, and the share of input spent on calls that follow an idle tool call (sleep, wait,
-wait/poll scripts) -- the usual dominant cost when evaluations are long. Output: one JSON line per session (and per
-in-session sub-agent), then a TOTAL line; it goes to the usage log (assets/resources.md). --since/--until are UTC ISO
-times compared with each session's START, so per-attempt worker sessions are counted exactly, while a long-running
-meta-agent session is counted whole (pass --session for it).
+Usage events are filtered by their own timestamps (UTC, ISO), so a session that started before the window (e.g. a
+meta-agent that began in Setup) contributes exactly its calls inside the window, and nothing outside it. Sessions are
+those whose working directory is the project directory or below it.
+Codex: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl (token_count events; repeated cumulative totals are skipped).
+Claude Code: ~/.claude/projects/<encoded cwd>/<session>.jsonl and <session>/subagents/agent-*.jsonl (message.usage).
+One JSON line per session or in-session sub-agent, then a TOTAL line. Fields: calls; input (gross, = uncached + cache
+reads + cache writes); uncached, cache_read, cache_write (Claude only), output; median context; role (worker if the
+opening prompt is a launch_workers.sh prompt, sub-agent, or main); agent/meta for workers (see launch_manifest.jsonl);
+idle_input_share = share of input on calls that follow a wait/poll tool call (a heuristic, not a cost attribution).
+Token counts are not money or allowance: prices, caching and plan rules differ.
 """
 import argparse
+import datetime as dt
 import glob
 import json
 import os
 import re
 import statistics
 
-IDLE = ('sleep', 'wait', 'wait_agent')                        # tool names
-POLL = re.compile(r'\bsleep\b|\bwait\b|_wait\b|--wait|squeue|sacct|qstat')  # commands that wait or poll
+IDLE = ('sleep', 'wait', 'wait_agent')
+POLL = re.compile(r'\bsleep\b|\bwait\b|_wait\b|--wait|squeue|sacct|qstat')
+WORKER = re.compile(r'You are agent (\d+) of meta-iteration ([A-Za-z0-9_.\/-]+)')
 
 
 def _idle(name, args):
     return name in IDLE or bool(POLL.search(args))
 
 
-def codex(a):
-    rows = []
-    for f in sorted(glob.glob(os.path.expanduser('~/.codex/sessions/*/*/*/rollout-*.jsonl'))):
-        meta, model, eff, last, first, n, ctx, tok = {}, None, None, 'work', None, 0, [], dict(idle=0, work=0, out=0, cached=0)
-        for line in open(f):
-            try:
-                r = json.loads(line)
-            except ValueError:
-                continue
-            p, t = r.get('payload', {}), r.get('type')
-            first = first or r.get('timestamp')
-            if t == 'session_meta' and not meta:      # forked sessions replay the parent's session_meta: keep the first
-                meta = dict(p)
-                sp = (p.get('source') or {}).get('subagent', {}) if isinstance(p.get('source'), dict) else {}
-                if isinstance(sp, dict) and isinstance(sp.get('thread_spawn'), dict):
-                    meta['label'] = sp['thread_spawn'].get('agent_path') or sp['thread_spawn'].get('agent_nickname') or ''
-            elif t == 'response_item' and p.get('type') == 'message' and p.get('role') == 'user' and 'label' not in meta:
-                txt = ' '.join(c.get('text', '') for c in p.get('content') or [] if isinstance(c, dict)).strip()
-                if txt and not txt.startswith(('#', '<')):
-                    meta['label'] = ' '.join(txt.split())
-            elif t == 'turn_context':
-                model, eff = p.get('model'), p.get('effort') or p.get('reasoning_effort')
-            elif t == 'response_item' and p.get('type') in ('function_call', 'custom_tool_call'):
-                last = 'idle' if _idle(p.get('name', ''), str(p.get('arguments') or p.get('input') or '')) else 'work'
-            elif t == 'event_msg' and p.get('type') == 'token_count' and p.get('info'):
-                u = p['info'].get('last_token_usage') or {}
-                n += 1; ctx.append(u.get('input_tokens', 0))
-                tok[last] += u.get('input_tokens', 0); tok['out'] += u.get('output_tokens', 0)
-                tok['cached'] += u.get('cached_input_tokens', 0)
-        if not n or not meta.get('cwd', '').startswith(a.cwd) or (first or '') < a.since or (a.until and first > a.until):
-            continue
-        sub = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
-        rows.append(dict(thread=(os.path.basename(f)[8:27] + ' ' + meta.get('label', ''))[:60],
-                         role='sub-agent' if sub else 'main', model=model, effort=eff,
-                         calls=n, **_fmt(tok, ctx)))
-    return rows
+def _t(s):
+    """Parse an ISO time (naive = UTC) to an aware datetime; None if empty or unparsable."""
+    if not s:
+        return None
+    try:
+        t = dt.datetime.fromisoformat(s.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
 
 
-def _first(f):
-    """Timestamp, working directory and opening user text of a Claude Code session file."""
-    ts, cwd, txt = None, None, ''
-    for line in open(f):
+class Acc:
+    def __init__(self):
+        self.calls, self.ctx = 0, []
+        self.k = dict(uncached=0, cache_read=0, cache_write=0, output=0, idle=0)
+
+    def add(self, uncached, cache_read, cache_write, output, idle):
+        gross = uncached + cache_read + cache_write
+        self.calls += 1; self.ctx.append(gross)
+        self.k['uncached'] += uncached; self.k['cache_read'] += cache_read; self.k['cache_write'] += cache_write
+        self.k['output'] += output
+        if idle:
+            self.k['idle'] += gross
+
+    def row(self, **meta):
+        gross = self.k['uncached'] + self.k['cache_read'] + self.k['cache_write']
+        return dict(meta, calls=self.calls, input=gross, uncached=self.k['uncached'], cache_read=self.k['cache_read'],
+                    cache_write=self.k['cache_write'], output=self.k['output'],
+                    median_ctx_k=round(statistics.median(self.ctx) / 1e3) if self.ctx else 0,
+                    idle_input_share=round(self.k['idle'] / gross, 2) if gross else None)
+
+
+def _inside(cwd, root):
+    if not cwd:
+        return False
+    cwd = os.path.abspath(cwd)
+    return cwd == root or cwd.startswith(root.rstrip(os.sep) + os.sep)
+
+
+def _in_window(ts, a):
+    t = _t(ts)
+    return t is not None and (a.since is None or t >= a.since) and (a.until is None or t < a.until)
+
+
+def _role(label, default):
+    m = WORKER.search(label or '')
+    return ('worker', int(m.group(1)), m.group(2)) if m else (default, None, None)
+
+
+def codex_file(f, a, check_cwd=True):
+    meta, label, model, eff, last, acc, prev = {}, '', None, None, 'work', Acc(), None
+    for line in open(f, errors='ignore'):
         try:
             r = json.loads(line)
         except ValueError:
             continue
-        ts = ts or r.get('timestamp')
+        p, t = r.get('payload') or {}, r.get('type')
+        if t == 'session_meta' and not meta:  # forked sessions replay the parent's session_meta: keep the first
+            meta = dict(p)
+            sp = p.get('source', {}).get('subagent', {}) if isinstance(p.get('source'), dict) else {}
+            if isinstance(sp, dict) and isinstance(sp.get('thread_spawn'), dict):
+                label = sp['thread_spawn'].get('agent_path') or sp['thread_spawn'].get('agent_nickname') or ''
+        elif t == 'response_item' and p.get('type') == 'message' and p.get('role') == 'user' and not label:
+            txt = ' '.join(c.get('text', '') for c in p.get('content') or [] if isinstance(c, dict)).strip()
+            if txt and not txt.startswith(('#', '<')):
+                label = ' '.join(txt.split())
+        elif t == 'turn_context':
+            model, eff = p.get('model', model), p.get('effort') or p.get('reasoning_effort') or eff
+        elif t == 'response_item' and p.get('type') in ('function_call', 'custom_tool_call'):
+            last = 'idle' if _idle(p.get('name', ''), str(p.get('arguments') or p.get('input') or '')) else 'work'
+        elif t == 'event_msg' and p.get('type') == 'token_count' and p.get('info'):
+            tot = p['info'].get('total_token_usage')
+            if tot is not None:
+                tot = json.dumps(tot, sort_keys=True)
+                if tot == prev:      # repeated update of the same cumulative total: not a new call
+                    continue
+                prev = tot
+            if not _in_window(r.get('timestamp'), a):
+                continue
+            u = p['info'].get('last_token_usage') or {}
+            inp, cached = u.get('input_tokens', 0), u.get('cached_input_tokens', 0)
+            acc.add(inp - cached, cached, 0, u.get('output_tokens', 0), last == 'idle')
+    if not acc.calls or (check_cwd and not _inside(meta.get('cwd'), a.cwd)):
+        return []
+    sub = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
+    role, agent, mi = _role(label, 'sub-agent' if sub else 'main')
+    out = acc.row(thread=(os.path.basename(f)[8:27] + ' ' + label)[:70], session=meta.get('id'), role=role,
+                  model=model, effort=eff)
+    out.pop('cache_write')
+    if agent is not None:
+        out.update(agent=agent, meta=mi)
+    return [out]
+
+
+def codex(a):
+    files = [a.session] if a.session else sorted(glob.glob(os.path.expanduser('~/.codex/sessions/*/*/*/rollout-*.jsonl')))
+    return [r for f in files for r in codex_file(f, a, check_cwd=not a.session)]
+
+
+def claude_file(f, a, label, role):
+    acc, model, last, seen = Acc(), None, 'work', set()
+    for line in open(f, errors='ignore'):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        m = r.get('message') if isinstance(r.get('message'), dict) else {}
+        if r.get('type') != 'assistant':
+            continue
+        u, mid = m.get('usage') or {}, m.get('id')
+        if u and mid not in seen:      # several content blocks of one message share its usage: count once
+            seen.add(mid)
+            if _in_window(r.get('timestamp'), a):
+                model = m.get('model', model)
+                acc.add(u.get('input_tokens', 0), u.get('cache_read_input_tokens', 0),
+                        u.get('cache_creation_input_tokens', 0), u.get('output_tokens', 0), last == 'idle')
+        for c in m.get('content') if isinstance(m.get('content'), list) else []:
+            if isinstance(c, dict) and c.get('type') == 'tool_use':
+                last = 'idle' if _idle(c.get('name', ''), json.dumps(c.get('input'))) else 'work'
+    if not acc.calls:
+        return []
+    role, agent, mi = _role(label, role)
+    out = acc.row(thread=label[:70], session=os.path.basename(f)[:-6], role=role, model=model, effort=None)
+    if agent is not None:
+        out.update(agent=agent, meta=mi)
+    return [out]
+
+
+def _opening(f):
+    cwd, txt = None, ''
+    for line in open(f, errors='ignore'):
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
         cwd = cwd or r.get('cwd')
         m = r.get('message') if isinstance(r.get('message'), dict) else {}
         if r.get('type') == 'user' and not txt:
             c = m.get('content')
             txt = c if isinstance(c, str) else ' '.join(x.get('text', '') for x in c or [] if isinstance(x, dict))
-        if ts and txt and cwd:
+        if cwd and txt:
             break
-    return ts or '', cwd or '', ' '.join(txt.split())
+    return cwd, ' '.join((txt or '').split())
 
 
 def claude(a):
     if a.session:
-        return _claude_session(a, a.session)
-    enc = re.sub(r'[^A-Za-z0-9]', '-', os.path.abspath(a.cwd))
+        sessions = [a.session]
+    else:
+        enc = re.sub(r'[^A-Za-z0-9]', '-', a.cwd)
+        sessions = sorted(glob.glob(os.path.expanduser('~/.claude/projects/%s*/*.jsonl' % glob.escape(enc))))
     rows = []
-    for f in sorted(glob.glob(os.path.expanduser('~/.claude/projects/%s*/*.jsonl' % enc))):
-        ts, cwd, txt = _first(f)
-        root = os.path.abspath(a.cwd)
-        if not (cwd == root or cwd.startswith(root + os.sep)) or ts < a.since or (a.until and ts > a.until):
+    for f in sessions:
+        cwd, txt = _opening(f)
+        if not a.session and not _inside(cwd, a.cwd):
             continue
-        rows += _claude_session(a, f, label=(os.path.basename(f)[:8] + ' ' + txt)[:60])
+        rows += claude_file(f, a, (os.path.basename(f)[:8] + ' ' + txt), 'main')
+        for g in sorted(glob.glob(os.path.join(f[:-6], 'subagents', 'agent-*.jsonl'))):
+            mf = g[:-6] + '.meta.json'
+            desc = json.load(open(mf)).get('description', '?') if os.path.exists(mf) else '?'
+            if a.match in desc:
+                rows += claude_file(g, a, desc, 'sub-agent')
     return rows
-
-
-def _claude_session(a, session, label='main'):
-    files = [(session, label)]
-    d = session[:-6]
-    for f in sorted(glob.glob(os.path.join(d, 'subagents', 'agent-*.jsonl'))):
-        m = json.load(open(f[:-6] + '.meta.json')) if os.path.exists(f[:-6] + '.meta.json') else {}
-        if a.match in m.get('description', ''):
-            files.append((f, m.get('description', '?')))
-    rows = []
-    for f, desc in files:
-        seen, last, n, ctx, model = set(), 'work', 0, [], None
-        tok = dict(idle=0, work=0, out=0, cached=0, cache_write=0)
-        for line in open(f):
-            try:
-                r = json.loads(line)
-            except ValueError:
-                continue
-            m = r.get('message') if isinstance(r.get('message'), dict) else {}
-            if r.get('type') != 'assistant':
-                continue
-            u, mid = m.get('usage') or {}, m.get('id')
-            if u and mid not in seen:
-                seen.add(mid); n += 1; model = m.get('model', model)
-                inp = u.get('input_tokens', 0) + u.get('cache_read_input_tokens', 0) + u.get('cache_creation_input_tokens', 0)
-                ctx.append(inp); tok[last] += inp; tok['out'] += u.get('output_tokens', 0)
-                tok['cached'] += u.get('cache_read_input_tokens', 0); tok['cache_write'] += u.get('cache_creation_input_tokens', 0)
-            for c in m.get('content') if isinstance(m.get('content'), list) else []:
-                if isinstance(c, dict) and c.get('type') == 'tool_use':
-                    last = 'idle' if _idle(c.get('name', ''), json.dumps(c.get('input'))) else 'work'
-        if n:
-            rows.append(dict(thread=desc[:60], role='main' if desc == label else 'sub-agent', model=model, effort=None,
-                             calls=n, **_fmt(tok, ctx)))
-    return rows
-
-
-def _fmt(tok, ctx):
-    tot = tok['idle'] + tok['work']
-    out = dict(input_M=round(tot / 1e6, 1), cached_M=round(tok['cached'] / 1e6, 1), output_M=round(tok['out'] / 1e6, 3),
-               median_ctx_k=round(statistics.median(ctx) / 1e3), idle_input_share=round(tok['idle'] / tot, 2) if tot else None)
-    if 'cache_write' in tok:
-        out['cache_write_M'] = round(tok['cache_write'] / 1e6, 1)
-    return out
 
 
 if __name__ == '__main__':
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('framework', choices=('codex', 'claude'))
     ap.add_argument('--cwd', default=os.getcwd()); ap.add_argument('--since', default=''); ap.add_argument('--until', default='')
-    ap.add_argument('--session'); ap.add_argument('--match', default='')
+    ap.add_argument('--session'); ap.add_argument('--match', default='', help='Claude: only sub-agents whose description contains this')
     a = ap.parse_args()
+    a.cwd = os.path.abspath(os.path.expanduser(a.cwd))
+    a.since, a.until = _t(a.since), _t(a.until)
     rows = codex(a) if a.framework == 'codex' else claude(a)
     for r in rows:
         print(json.dumps(r))
-    keys = ('calls', 'input_M', 'output_M')
-    tot = {k: round(sum(r[k] for r in rows), 3) for k in keys}
-    tot['idle_input_share'] = round(sum(r['input_M'] * (r['idle_input_share'] or 0) for r in rows)
-                                    / max(1e-9, sum(r['input_M'] for r in rows)), 2)
+    keys = ('calls', 'input', 'uncached', 'cache_read', 'cache_write', 'output')
+    tot = {k: sum(r.get(k, 0) for r in rows) for k in keys}
+    tot['idle_input_share'] = round(sum(r['input'] * (r['idle_input_share'] or 0) for r in rows) / tot['input'], 2) if tot['input'] else None
     print(json.dumps(dict(thread='TOTAL', **tot)))

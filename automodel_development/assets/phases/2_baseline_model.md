@@ -1,70 +1,53 @@
 ---
 name: baseline_model
-description: Second phase. Implement a simple baseline model with a parameterized signature, test the full pipeline end-to-end using a sub-agent, and verify outputs are plausible before the iterative loop.
-entry: `CONTEXT.md` present.
-exit: Baseline model defined; end-to-end pipeline verified by sub-agent; CONTEXT.md updated.
+entry: RUN_PLAN.md approved for setup; status says Phase 2.
+exit: Harness and evaluator tested; baseline and references scored; calibration recorded (heavy: part B approved).
+description: Second phase. Build the baseline and a shared attempt harness, test the evaluator and the execution path end to end, score the references, and calibrate cost.
 ---
 
 # Phase 2 — Baseline Model
 
----
+## 1. Baseline and shared harness
+- A deliberately simple baseline in `model.X` (`.py`, `.m`, `.r`, …) taking its parameters as an explicit argument.
+- A **shared attempt harness** that every agent calls instead of writing its own driver. Given a candidate (a source
+  file, expression or configuration), it fits, scores under the plan's decision rule, and writes:
+  - one structured **record per fit**, screens and failures included: stable candidate and fit IDs, proposer, stage
+    (screen / scored / refit / reference), status, model, data and protocol identity, settings, seed, metrics and stop
+    reason. Write records atomically (one file per fit, or an append the platform guarantees); one collector builds
+    tables and checks counts. Refits and rescores add records; they never overwrite.
+  - a metrics card (`card.md`, first line a one-line summary) generated from the record;
+  - a completion validator (`done_attempt.sh <attempt_dir>`): exit 0 once the attempt's outcome is recorded — a
+    valid result, or a failure recorded with its reason (the review quarantines failures); non-zero if nothing
+    usable was recorded, so the launcher retries.
+  Light searches may keep one record per candidate (structure, result, short rationale) and skip cards and the
+  validator file; count fits inside the harness.
+- The harness counts evaluations against the plan's budget and refuses work beyond it; parallel agents share one
+  counter (e.g. under a lock file).
+- Heavy searches: it also submits long jobs, leaves `attempt_i/.job` (how to harvest) while one runs, and offers a wait
+  command that blocks up to a given time and then reports the job's state.
 
-## Steps
+## 2. Evaluator tests (required)
+Before any search, test the score and every hard gate on known passes and failures: missing, empty and non-finite
+results must fail; subsets, tie rule and complexity accounting must match the plan; references and candidates go
+through the same code. For a modification that claims to contain the baseline, check that its null setting reproduces
+the baseline; for a replacement structure, run a reference-output smoke test. Keep these as runnable tests.
 
-### 1. Baseline model
-Program a first, intentionally simple model in a `model.X` file (`X` = `.py`, `.m`, `.r`, etc.). The goal is a working skeleton, not a good model.
+## 3. End-to-end pilot
+Use a sub-agent (or this session, if sub-agents are unavailable) to run the full pipeline on one or two models at
+default settings, through the execution path the search will use (local, cluster, detached workers): fit, predict,
+record, card, validator; for heavy searches also job submission, waiting, the `.job` marker and harvesting after an
+interruption. Record the time and compute of one evaluation and the pilot's wall time (heavy: its model, effort and
+usage), and revisit the light/heavy classification if they differ from Phase 1's estimate.
 
-- Accept parameters as an explicit function argument with reasonable defaults — this makes it easy for the optimization routine to sweep parameter values without changing the call signature.
-- Implement a **shared attempt harness** that every agent calls instead of writing its own driver: given an attempt
-  folder, it fits the model, evaluates it with the agreed protocol, appends one fixed-schema record (structure,
-  complexity, metrics, runtime, convergence, seed) to a common results file (one write per record, so parallel agents
-  do not interleave), and writes a metrics card (`card.md`, first
-  line a one-line summary). This keeps results comparable and saves agents' tokens. For heavy searches it also submits
-  long jobs, leaves `attempt_i/.job` while one runs, and offers a wait command that blocks up to a given time and then
-  reports the job's state (`assets/resources.md` §3).
+## 4. References and baseline
+Score the plan's references and the baseline at default settings; refit deeply (more starts, new seeds) only those
+that will be incumbents. If this will take much longer than the plan said, tell the user before running it. Profile
+where the baseline fails (by region, group or regime) and how much error comes from any component that stays fixed.
 
-### 2. End-to-end test via sub-agent
-**Use a sub-agent** to run the full pipeline on a small data subset (one or two reference models at default fit
-settings; the full reference scoring is step 4):
-- Train/calibrate the model using the optimization routine
-- Generate predictions
-- Log all metrics (including run-time and memory)
+## 5. Calibration and approval (heavy)
+Estimate a representative scored attempt (proposal, screening, queue, fitting, harvesting) plus setup and review, and
+name what is unmeasured. Fill `RUN_PLAN.md` part B (`assets/phases/3_iterate.md` Setup) and get it approved.
 
-This step is critical: it confirms that sub-agents can read/write files and execute code *before* the iterative loop begins.
-
-It is also the first **cost calibration**: record the time and compute of one evaluation and the sub-agent's wall
-time (heavy searches: also its model, effort and usage). Phase 3 scales these to estimate a meta-iteration
-(`assets/resources.md` §5); revisit the light/heavy classification if the evaluation time differs from Phase 1's guess.
-For a heavy search, the test also exercises job submission, the wait command, the `.job` marker and harvesting after
-an interruption.
-
-### 3. Sanity check
-Verify:
-- Model produces plausible outputs (outputs in expected range, no NaNs or infinities)
-- Optimization problem is well-posed (convergence achieved, metrics not degenerate)
-- Run-time and memory usage are compatible with the iterative loop planned in Phase 3
-
-If the model fails to converge, diagnose and fix before proceeding.
-
-### 4. References
-Score the references agreed in the plan (item 8) at the default fit settings; refit deeply (more restarts and seeds)
-only the few that will serve as incumbents. If this will take much longer than the plan said, say so before running
-it.
-
-Apply the Baseline checks adopted from `assets/checks.md` (typically the ★ ones: the evaluator reproduces reference
-results, a modification at its null value reproduces the baseline, and where the baseline fails is known).
-
----
-
-## Context dump (end of phase)
-
-Update `CONTEXT.md` with:
-- Mock model description (structure, key equations or code functions)
-- Baseline metrics on train and validation sets (or in line with previous choices e.g. cross-val)
-- Confirmed run-time and memory per optimization run
-- Any environment or permission findings from the sub-agent test
-- The cost calibration (evaluation time and compute; sub-agent wall time and, if heavy, usage) and the search size
-
-Then **verify `CONTEXT.md` is self-sufficient**: a fresh agent with no conversation history should be able to resume from it alone.
-
-If the sub-agent test left large logs in the conversation, **suggest the user compact it** before proceeding to Phase 3 — Iterate.
+## Context dump
+Update the status block and project facts in `CONTEXT.md`: baseline and reference scores, evaluation time and memory,
+harness commands, test results, calibration. Suggest compacting if the pilot left bulky logs.
