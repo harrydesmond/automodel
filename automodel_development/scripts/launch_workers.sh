@@ -5,14 +5,20 @@
 #
 #   setsid nohup <skill>/scripts/launch_workers.sh meta_3 > meta_3/launch.log 2>&1 < /dev/null &
 #   <skill>/scripts/launch_workers.sh meta_3 2 5          # only agents 2 and 5 (when no launcher runs on meta_3)
-#   touch meta_3/STOP                                     # no new sessions start; running ones finish
+#   touch meta_3/STOP                                     # no new session or hook starts; running ones finish
+#   <skill>/scripts/launch_workers.sh --reclaim meta_3    # after a crash: release the lock once no worker survives
 # Run from the project root. Required in <meta_dir>:
 #   agents.conf      one line per agent: <s> <cli: codex|claude> <model> [effort or -] [attempts]   (# comments allowed)
 #   COMMON_PROMPT.md, agent_<s>/DIRECTION.md
 #   done_attempt.sh  executable; exit 0 once the harness has recorded <attempt_dir>'s outcome (a valid result, or a
 #                    failure with its reason); non-zero if nothing usable is recorded (then the session is retried).
 #                    Prose files are not evidence.
-# Optional: after_agent.sh <agent_dir> (e.g. a refit of the agent's best attempt for the review).
+# Optional: after_agent.sh <agent_dir> (e.g. a refit of the agent's best attempt for the review); hooks submit work only
+#   through the harness, which applies the same budget and STOP checks.
+# Ownership: an atomic lock directory <meta_dir>/.lock (launcher PID, one process group per agent). Workers run in their
+#   own process groups; on TERM/INT the launcher stops those groups and releases the lock only once none survives
+#   (otherwise the lock stays and failed.log says so). Scheduler jobs are not cancelled by this: harvest or cancel them
+#   from their recorded receipts.
 # Permissions (explicit, approved by the user):
 #   AM_CLAUDE_FLAGS  required for cli=claude, e.g. "--permission-mode acceptEdits --allowedTools Bash(python3:*)"
 #   AM_CODEX_FLAGS   default "-s workspace-write" (no network); widen only as approved
@@ -21,15 +27,21 @@
 set -u
 META=${1:?usage: launch_workers.sh <meta_dir> [agents...]}; shift
 META=${META%/}
-for f in agents.conf COMMON_PROMPT.md; do [ -f "$META/$f" ] || { echo "need $META/$f" >&2; exit 1; }; done
-[ -x "$META/done_attempt.sh" ] || { echo "need executable $META/done_attempt.sh (completion validator)" >&2; exit 1; }
 ROOT=$PWD; RETRY_WAIT=${AM_RETRY_WAIT:-1800}; MAX_TRIES=${AM_MAX_TRIES:-8}; STAGGER=${AM_STAGGER:-20}
 MANIFEST=$META/launch_manifest.jsonl
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
-if [ -f "$META/.launcher.pid" ] && alive "$(cat "$META/.launcher.pid")"; then
-    echo "a launcher for $META is already running (pid $(cat "$META/.launcher.pid"))" >&2; exit 1
+LOCK=$META/.lock
+groups_alive() { local g; for g in $(cat "$LOCK/groups" 2>/dev/null); do kill -0 -- "-$g" 2>/dev/null && echo "$g"; done; }
+if [ "$META" = "--reclaim" ]; then
+    META=${1:?usage: launch_workers.sh --reclaim <meta_dir>}; META=${META%/}; LOCK=$META/.lock
+    [ -d "$LOCK" ] || { echo "no lock in $META"; exit 0; }
+    alive "$(cat "$LOCK/launcher" 2>/dev/null)" && { echo "launcher $(cat "$LOCK/launcher") is alive; not reclaiming" >&2; exit 1; }
+    live=$(groups_alive); [ -z "$live" ] || { echo "worker process groups still alive: $live; stop them first" >&2; exit 1; }
+    rm -rf "$LOCK"; echo "lock released; reconcile recorded jobs (.job receipts) before relaunching"; exit 0
 fi
 
+for f in agents.conf COMMON_PROMPT.md; do [ -f "$META/$f" ] || { echo "need $META/$f" >&2; exit 1; }; done
+[ -x "$META/done_attempt.sh" ] || { echo "need executable $META/done_attempt.sh (completion validator)" >&2; exit 1; }
 declare -A CLI MODEL EFFORT NATT
 while IFS= read -r line || [ -n "$line" ]; do
     read -r s c m e n _ <<< "${line%%#*}"
@@ -45,22 +57,28 @@ for s in $AGENTS; do
         codex) ;;
         *) echo "agent $s: unknown cli '${CLI[$s]}'" >&2; exit 1 ;;
     esac
-    o=$META/agent_$s/.owner
-    if [ -f "$o" ] && alive "$(cat "$o")"; then echo "agent $s is owned by live pid $(cat "$o")" >&2; exit 1; fi
 done
 
-echo $$ > "$META/.launcher.pid"
-PIDS=""
-killtree() { local c; for c in $(pgrep -P "$1"); do killtree "$c" "$2"; done; kill "-$2" "$1" 2>/dev/null; }
-cleanup() {  # on TERM/INT: stop every process the workers started, then release the markers
-    trap - TERM INT
-    for p in $PIDS; do killtree "$p" TERM; done
-    sleep 2
-    for p in $PIDS; do killtree "$p" KILL; done
-    for s in $AGENTS; do rm -f "$META/agent_$s/.owner"; done
-    rm -f "$META/.launcher.pid"
-    echo "$(date '+%F %T') launcher interrupted; workers stopped" >> "$META/failed.log"
+if ! mkdir "$LOCK" 2>/dev/null; then
+    if alive "$(cat "$LOCK/launcher" 2>/dev/null)"; then echo "a launcher for $META is already running (pid $(cat "$LOCK/launcher"))" >&2
+    else echo "stale lock $LOCK: check for surviving workers and recorded jobs, then run with --reclaim" >&2; fi
     exit 1
+fi
+echo $$ > "$LOCK/launcher"; : > "$LOCK/groups"
+PIDS=""
+release() {  # stop recorded worker groups (if asked), then release the lock only if none survives
+    local sig g i
+    for sig in ${1:-}; do for g in $PIDS; do kill "-$sig" -- "-$g" 2>/dev/null; done; [ "$sig" = TERM ] && sleep 2; done
+    for i in $(seq 1 10); do [ -z "$(groups_alive)" ] && break; sleep 1; done
+    if [ -n "$(groups_alive)" ]; then
+        echo "$(date '+%F %T') worker process groups $(groups_alive | tr '\n' ' ')unresolved; lock kept" >> "$META/failed.log"; return 1
+    fi
+    rm -rf "$LOCK"
+}
+cleanup() {
+    trap '' TERM INT
+    echo "$(date '+%F %T') launcher interrupted" >> "$META/failed.log"
+    release "TERM KILL"; exit 1
 }
 trap cleanup TERM INT
 
@@ -103,7 +121,7 @@ session_until() {  # agent, label, done-test, prompt: retry until the test passe
 
 agent_loop() {
     local s=$1 d=$META/agent_$1 i a n=${NATT[$1]} rc
-    mkdir -p "$d"; echo "$BASHPID" > "$d/.owner"
+    mkdir -p "$d"
     for i in $(seq 1 "$n"); do
         a=$d/attempt_$i
         session_until "$s" "a$i" "'$META/done_attempt.sh' '$a'" "You are agent $s of meta-iteration $META of an automodel search; \
@@ -114,28 +132,35 @@ harvest it as COMMON_PROMPT.md describes and never resubmit it. If $META/STOP ap
 when $a holds a complete result (the harness's validator passes), no job of yours is pending, $d/notes.md is updated \
 (<= 300 words: current best, what worked, queue of next hypotheses) and $d/exchange.md lists any component worth \
 sharing (file, parameter map, effect). Final reply: at most five lines."
-        rc=$?; [ $rc -ne 0 ] && { rm -f "$d/.owner"; return $rc; }
+        rc=$?; [ $rc -ne 0 ] && return $rc
     done
     session_until "$s" summary "[ -s '$d/summary.md' ]" "You are agent $s of meta-iteration $META of an automodel search; \
 project directory $ROOT. All $n attempts in $d are finished. Read $META/COMMON_PROMPT.md (its summary specification), \
 $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.md. No new evaluations."
-    rc=$?; [ $rc -ne 0 ] && { rm -f "$d/.owner"; return $rc; }
+    rc=$?; [ $rc -ne 0 ] && return $rc
     if [ -x "$META/after_agent.sh" ] && [ ! -f "$d/.after_agent.done" ]; then
+        [ -f "$META/STOP" ] && { log "$s" "after_agent.sh not started: STOP"; return 3; }
         "$META/after_agent.sh" "$d" >> "$d/after_agent.log" 2>&1; rc=$?
         log "$s" "after_agent.sh exit $rc"
-        [ $rc -eq 0 ] || { fail "$s" "after_agent.sh exit $rc"; rm -f "$d/.owner"; return 1; }
+        [ $rc -eq 0 ] || { fail "$s" "after_agent.sh exit $rc"; return 1; }
         touch "$d/.after_agent.done"
     fi
-    log "$s" "finished"; rm -f "$d/.owner"
+    log "$s" "finished"
 }
 
 echo "$(date '+%F %T') launching agents: $AGENTS"
 rm -f "$META/failed.log"
-for s in $AGENTS; do agent_loop "$s" & PIDS="$PIDS $!"; sleep "$STAGGER"; done
+set +m
+BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES MANIFEST CLI MODEL EFFORT NATT)
+$(declare -f log manifest fail run_session session_until agent_loop)"
+for s in $AGENTS; do
+    setsid bash -c "$BOOT"$'\n''agent_loop "$1"' automodel-worker "$s" &
+    PIDS="$PIDS $!"; echo "$!" >> "$LOCK/groups"; sleep "$STAGGER"
+done
 status=0
 for p in $PIDS; do wait "$p"; rc=$?; [ $rc -gt $status ] && status=$rc; done
 [ -s "$META/failed.log" ] && status=1
-rm -f "$META/.launcher.pid"
+release "" || status=1
 case $status in
     0) echo "$(date '+%F %T') $META: all agents finished; start the review" ;;
     3) echo "$(date '+%F %T') $META: stopped by $META/STOP; completed attempts are kept" ;;

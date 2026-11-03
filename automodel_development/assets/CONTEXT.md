@@ -7,7 +7,7 @@
 - **Phase / step:** <e.g. 3 / review of meta_2>
 - **Active meta-iteration:** <m, state: planned / running / reviewing / done>; last completed: <m>
 - **Plan and protocol:** `RUN_PLAN.md` v<n> (approved <date>); decision-rule version <v>
-- **Best eligible candidate:** `<path>` — <score>; reported-only failures: <…>
+- **Best eligible candidate:** `<path>` — <score>; reported-only failures: <…> (or: none yet / none exists)
 - **Budget:** <fits / wall time / compute used of cap>
 - **Pending jobs and processes:** <IDs, owner, how to harvest or cancel; "none">
 - **Next action:** <…>

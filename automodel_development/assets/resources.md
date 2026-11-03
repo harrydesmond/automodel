@@ -32,14 +32,15 @@ supervise attempts:
    sequentially instead.
 3. Launch `setsid nohup <skill>/scripts/launch_workers.sh meta_m > meta_m/launch.log 2>&1 < /dev/null &`. Each attempt
    is a fresh non-interactive session; memory between attempts is the agent's `notes.md` (≤ 300 words) and
-   `exchange.md` lists components others may import. The launcher retries incomplete sessions a bounded number of
-   times, refuses to start an agent another live process owns, stops all its workers if it receives TERM or INT, and
-   starts no new session once `meta_m/STOP` exists. After a hard kill or a crash, check for orphaned worker processes
-   and reconcile recorded jobs (harvest a known job; never
-   resubmit one whose receipt is uncertain without checking) before re-running it. A scheduler's "completed" is not
+   `exchange.md` lists components others may import. The launcher takes exclusive ownership (`meta_m/.lock`) before
+   starting workers, retries incomplete sessions a bounded number of times, and starts no new session or hook once
+   `meta_m/STOP` exists. On interruption it stops its recorded worker process groups and keeps the lock if it cannot
+   confirm they are gone; after a crash, `launch_workers.sh --reclaim meta_m` releases it only when no worker
+   survives. Reconcile submitted jobs before relaunching (harvest a known job; never resubmit one whose receipt is
+   uncertain without checking); stopping local processes does not cancel queued jobs. A scheduler's "completed" is not
    success: the validator decides.
-4. Watch without spending model calls: `<skill>/scripts/worker_status.sh meta_m --wait <s>` returns when the launcher
-   exits or a failure is logged (in Claude Code run it in the background; its completion notice wakes the session;
+4. Watch without spending model calls: once the launcher has registered, `<skill>/scripts/worker_status.sh meta_m
+   --wait <s>` returns when it exits, a failure is logged or <s> pass (at once if no launcher runs) (in Claude Code run it in the background; its completion notice wakes the session;
    in Codex, wait with the sleep tool for a time chosen from the observed attempt durations, then run it once).
    Report progress at the agreed cadence; review when all agents finish.
 
@@ -71,9 +72,9 @@ models (`frameworks.md`), not tiers. None of these allocations has been compared
   evaluation + time to notice) + review. Compute ≈ evaluations × cost. Parallelism (agents, or variants per attempt
   evaluated together) buys progress per hour with usage and compute; sequence costs wall time.
 - Do not convert tokens into a share of an allowance or into money without the user's reading or prices.
-- One uncontrolled observation (~10-min cluster evaluations): worker input per attempt fell from 14.2 M tokens
-  (in-session, waiting meta-agent, 1-min polling) to ~3–4 M with detached per-attempt workers, and the meta-agent's
-  share from 22% to ~4%; other settings changed too. A reason to measure, not a forecast.
+- Measure total worker, supervisor, summary and review usage on this workload. Fresh attempt sessions can reduce
+  repeated context, but setup and hand-over costs can offset the saving; compare validated results within the same
+  total budget.
 
 ## 6. Usage log (heavy)
 `launch_workers.sh` writes `meta_m/launch_manifest.jsonl` (agent, session label, model, effort, start/end). At each

@@ -28,13 +28,26 @@ setup; touch meta_1/STOP; rc=$(run); check "STOP: nothing starts, exit 3" '[ "$r
 setup; FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/launch.log 2>&1 & L=$!; sleep 2
 check "second launcher refused while one runs" '[ "$(run)" = 1 ]'
 kill -TERM $L; wait $L 2>/dev/null; sleep 1
-check "launcher TERM stops its workers and clears markers" '! pgrep -x sleep -a 2>/dev/null | grep -q "sleep 300" && [ ! -f meta_1/.launcher.pid ] && [ ! -f meta_1/agent_1/.owner ]'
+check "launcher TERM stops its workers and releases the lock" '! pgrep -x sleep -a 2>/dev/null | grep -q "sleep 300" && [ ! -d meta_1/.lock ]'
+setup; export HB=$T/hb; FAKE_MODE=stubborn bash "$S/launch_workers.sh" meta_1 1 > meta_1/launch.log 2>&1 & L=$!; sleep 2
+kill -TERM $L; wait $L 2>/dev/null; sleep 1; h1=$(cat "$HB"); sleep 1; h2=$(cat "$HB")
+check "TERM-ignoring descendant is stopped (heartbeat ends)" '[ "$h1" = "$h2" ] && [ ! -d meta_1/.lock ]'
+setup; ( FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/l1.log 2>&1 & FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/l2.log 2>&1 & wait ) & B=$!
+sleep 3; n=$(grep -c "a1 start" meta_1/launch_manifest.jsonl 2>/dev/null || echo 0); nl=$(grep -l "already running" meta_1/l1.log meta_1/l2.log | wc -l)
+check "simultaneous launchers: exactly one runs" '[ "$nl" = 1 ] && [ "$(grep -c "\"agent\":1,\"label\":\"a1\",.*start" meta_1/launch_manifest.jsonl)" = 1 ]'
+kill -TERM $(cat meta_1/.lock/launcher) 2>/dev/null; wait $B 2>/dev/null
+setup; mkdir -p meta_1/.lock; echo 999999 > meta_1/.lock/launcher; : > meta_1/.lock/groups
+check "stale lock blocks launch until --reclaim" '[ "$(run)" = 1 ] && bash "$S/launch_workers.sh" --reclaim meta_1 >/dev/null && [ "$(run)" = 0 ]'
+setup; run >/dev/null; printf '#!/bin/sh\ntouch "$1/HOOKRAN"\n' > meta_1/after_agent.sh; chmod +x meta_1/after_agent.sh; rm -f meta_1/agent_*/.after_agent.done; touch meta_1/STOP; rc=$(run)
+check "STOP blocks a pending after_agent hook" '[ "$rc" = 3 ] && [ ! -f meta_1/agent_1/HOOKRAN ]'
 setup; FAKE_MODE=badmodel run >/dev/null; rc=$(FAKE_MODE=flaky FAKE_COUNTER=$T/cnt run 1)
 check "old config error in the log does not block a retry" '[ "$rc" = 0 ]'; rm -f "$T/cnt"
-setup; echo old > meta_1/failed.log; touch -d '1 hour ago' meta_1/failed.log
-FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/launch.log 2>&1 & L=$!
-t0=$(date +%s); timeout 30 bash "$S/worker_status.sh" meta_1 --wait 6 >/dev/null; w=$?; dt=$(( $(date +%s) - t0 ))
-check "status --wait is not ended by an old failed.log" '[ "$w" = 0 ] && [ "$dt" -ge 6 ] && kill -0 $L 2>/dev/null'
+setup; t0=$(date +%s); bash "$S/worker_status.sh" meta_1 --wait 60 >/dev/null; dt=$(( $(date +%s) - t0 ))
+check "status --wait returns at once when no launcher runs" '[ "$dt" -le 1 ]'
+check "status --wait rejects a bad deadline" '! bash "$S/worker_status.sh" meta_1 --wait x >/dev/null 2>&1'
+FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/launch.log 2>&1 & L=$!; sleep 1; echo old > meta_1/failed.log; touch -d '1 hour ago' meta_1/failed.log
+t0=$(date +%s); timeout 30 bash "$S/worker_status.sh" meta_1 --wait 3 >/dev/null; w=$?; dt=$(( $(date +%s) - t0 ))
+check "status --wait keeps its deadline and ignores an old failed.log" '[ "$w" = 0 ] && [ "$dt" -ge 3 ] && [ "$dt" -le 6 ] && kill -0 $L 2>/dev/null'
 kill -TERM $L; wait $L 2>/dev/null
 setup; rc=$(run); rc2=$(run); check "re-run after completion is a no-op success" '[ "$rc2" = 0 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 3 ]'
 
@@ -55,5 +68,13 @@ ev() { printf '{"type":"assistant","timestamp":"%s","cwd":"%s","message":{"id":"
   ev 2026-01-01T09:00:00Z "$P" a 9; ev 2026-01-01T10:30:00Z "$P" b 99; ev 2026-01-01T10:30:00Z "$P" b 99; } > "$CP/sess1.jsonl"
 ev 2026-01-01T10:45:00Z "$P" c 49 > "$CP/sess1/subagents/agent-x.jsonl"
 cd "$P"; out=$(python3 "$S/usage_report.py" claude --since 2026-01-01T10:00 --until 2026-01-01T12:00)
-check "usage (claude): window, duplicate message counted once, worker tag, sub-agent" 'echo "$out" | grep -q "\"role\": \"worker\", \"model\": \"m\", \"effort\": null, \"agent\": 2" || echo "$out" | grep -q "\"agent\": 2"; echo "$out" | tail -1 | grep -q "\"calls\": 2, \"input\": 150"'
+check "usage (claude): worker tag" 'echo "$out" | grep -q "\"role\": \"worker\".*\"agent\": 2"'
+check "usage (claude): window, duplicate message counted once, sub-agent" 'echo "$out" | tail -1 | grep -q "\"calls\": 2, \"input\": 150"'
+check "usage: malformed or reversed bounds are errors" '! python3 "$S/usage_report.py" claude --since 2026-13-45 >/dev/null 2>&1 && ! python3 "$S/usage_report.py" claude --since 2026-01-02 --until 2026-01-01 >/dev/null 2>&1'
+mf=$HOME/.codex/sessions/2026/01/01/rollout-2026-01-01T09-00-00-m.jsonl
+{ printf '{"timestamp":"2026-01-01T09:00:00Z","type":"session_meta","payload":{"id":"s3","cwd":"%s"}}\n' "$P"
+  printf '{"timestamp":"2026-01-01T10:00:00Z","type":"turn_context","payload":{"model":"A","effort":"low"}}\n'; tc 2026-01-01T10:30:00Z 5 10 0
+  printf '{"timestamp":"2026-01-01T13:00:00Z","type":"turn_context","payload":{"model":"B","effort":"high"}}\n'; tc 2026-01-01T13:30:00Z 6 10 0; } > "$mf"
+out=$(python3 "$S/usage_report.py" codex --session "$mf" --since 2026-01-01T10:00 --until 2026-01-01T12:00)
+check "usage: model label from counted calls only" 'echo "$out" | head -1 | grep -q "\"model\": \"A\", \"effort\": \"low\""'
 cd /; echo "passed $pass, failed $failn"; [ "$failn" -eq 0 ]

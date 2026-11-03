@@ -34,8 +34,9 @@ replication).
 - **Requirements**: decide for each whether it is a hard gate (candidates failing it are rejected), part of the score,
   or reported only.
 - **Selection score**:
-  - Not complexity-penalised (RMSE, log-loss, …): measured out of sample, on a validation set or by (grouped,
-    stratified or time-ordered) cross-validation.
+  - Not complexity-penalised (RMSE, log-loss, …): for predictive selection, measured out of sample on a validation
+    set or by (grouped, stratified or time-ordered) cross-validation. A deliberately descriptive in-sample comparison
+    is allowed with explicit complexity limits and no independent predictive claim.
   - Complexity-penalised (an information criterion, MDL, …): an agreed, well-defined criterion may rank candidates on
     all the data; a validation split is not needed merely to compute it. Decide separately whether the goal is a
     descriptive comparison or predictive generalisation, and whether independent evidence is affordable. A penalty does

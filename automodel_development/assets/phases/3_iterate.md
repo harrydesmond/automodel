@@ -1,7 +1,7 @@
 ---
 name: iterate
 entry: Phase 2 done and the search plan approved; status says Phase 3 (resume the active meta-iteration from its recorded state).
-exit: The stop rule fires, the budget is spent, or the user ends the search; CONTEXT.md points to the best eligible candidate.
+exit: The stop rule fires, the budget is spent, or the user ends the search; CONTEXT.md records the best eligible candidate, or that none exists.
 description: Third and main phase. Run M meta-iterations of S parallel agents making I sequential structural modifications each (in-session sub-agents, or detached workers for heavy searches), within the approved budget; review, report progress, re-plan and repeat.
 ---
 
@@ -17,8 +17,8 @@ description: Third and main phase. Run M meta-iterations of S parallel agents ma
 4. **Plan.** Directions (distinct, with scope limits), seeds, M or stop rule, S, I, models and effort, budget and
    pauses: light searches use the approved compact plan (ask again only if Phase 2's timing changed the estimate
    materially); heavy
-   searches fill `RUN_PLAN.md` part B, with a recommendation and alternatives where the choice matters
-   (`resources.md` §4–5), and get it approved.
+   searches reuse the part B approved after Phase 2 (fill it here only if missing, with a recommendation and
+   alternatives where the choice matters, `resources.md` §4–5); ask again only for changes it does not cover.
 
 ## Execution — for each meta-iteration m
 ### 1. Launch
@@ -28,7 +28,8 @@ harness and decision rule; its share of the evaluation budget; the attempt contr
 outcome recorded through the harness (result or recorded failure, short rationale), no job pending, and a structural change, not just a refit; the
 waiting and context rules (`resources.md` §3; for light searches only the output rules matter).
 
-Before launching, tell the user: m of M, the current best eligible score, the budget left, and when to expect the next
+Before launching, update the `CONTEXT.md` status (active round, protocol version, remaining budget, next action) and
+tell the user: m of M, the current best eligible score, the budget left, and when to expect the next
 update.
 
 - **In-session:** launch the S sub-agents in parallel in one message, fresh for each meta-iteration. If a usage limit
@@ -59,7 +60,8 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
   separately against the budget.
 - **Re-plan** (`resources.md` §7) and apply the stop rule. Use a fresh reviewer (new session or another framework)
   when the data, evaluator or protocol changed, a result is disputed, or the stakes warrant it.
-- Write `meta_m/review.md` (results table, what worked and did not, decisions).
+- Write `meta_m/review.md` (results table, what worked and did not, decisions), then update the `CONTEXT.md` status
+  (completed round, incumbent, budget, pending jobs with their receipts, next action) before any further launch.
 
 ### 4. Report and continue
 Send the user a short progress message: best eligible score and the attempt that produced it (with any reported-only

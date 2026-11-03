@@ -83,7 +83,7 @@ def _role(label, default):
 
 
 def codex_file(f, a, check_cwd=True):
-    meta, label, model, eff, last, acc, prev = {}, '', None, None, 'work', Acc(), None
+    meta, label, model, eff, last, acc, prev, used = {}, '', None, None, 'work', Acc(), None, set()
     for line in open(f, errors='ignore'):
         try:
             r = json.loads(line)
@@ -113,11 +113,13 @@ def codex_file(f, a, check_cwd=True):
             if not _in_window(r.get('timestamp'), a):
                 continue
             u = p['info'].get('last_token_usage') or {}
+            used.add((model, eff))
             inp, cached = u.get('input_tokens', 0), u.get('cached_input_tokens', 0)
             acc.add(inp - cached, cached, 0, u.get('output_tokens', 0), last == 'idle')
     if not acc.calls or (check_cwd and not _inside(meta.get('cwd'), a.cwd)):
         return []
     sub = isinstance(meta.get('source'), dict) and 'subagent' in meta['source']
+    model, eff = next(iter(used)) if len(used) == 1 else ('mixed', None)   # settings of the counted calls only
     role, agent, mi = _role(label, 'sub-agent' if sub else 'main')
     out = acc.row(thread=(os.path.basename(f)[8:27] + ' ' + label)[:70], session=meta.get('id'), role=role,
                   model=model, effort=eff)
@@ -133,7 +135,7 @@ def codex(a):
 
 
 def claude_file(f, a, label, role):
-    acc, model, last, seen = Acc(), None, 'work', set()
+    acc, last, seen, used = Acc(), 'work', set(), set()
     for line in open(f, errors='ignore'):
         try:
             r = json.loads(line)
@@ -146,7 +148,7 @@ def claude_file(f, a, label, role):
         if u and mid not in seen:      # several content blocks of one message share its usage: count once
             seen.add(mid)
             if _in_window(r.get('timestamp'), a):
-                model = m.get('model', model)
+                used.add(m.get('model'))
                 acc.add(u.get('input_tokens', 0), u.get('cache_read_input_tokens', 0),
                         u.get('cache_creation_input_tokens', 0), u.get('output_tokens', 0), last == 'idle')
         for c in m.get('content') if isinstance(m.get('content'), list) else []:
@@ -154,6 +156,7 @@ def claude_file(f, a, label, role):
                 last = 'idle' if _idle(c.get('name', ''), json.dumps(c.get('input'))) else 'work'
     if not acc.calls:
         return []
+    model = next(iter(used)) if len(used) == 1 else 'mixed'
     role, agent, mi = _role(label, role)
     out = acc.row(thread=label[:70], session=os.path.basename(f)[:-6], role=role, model=model, effort=None)
     if agent is not None:
@@ -205,7 +208,13 @@ if __name__ == '__main__':
     ap.add_argument('--session'); ap.add_argument('--match', default='', help='Claude: only sub-agents whose description contains this')
     a = ap.parse_args()
     a.cwd = os.path.abspath(os.path.expanduser(a.cwd))
-    a.since, a.until = _t(a.since), _t(a.until)
+    for name in ('since', 'until'):
+        raw = getattr(a, name); parsed = _t(raw)
+        if raw and parsed is None:
+            ap.error(f'--{name} must be an ISO timestamp, e.g. 2026-11-03T10:00')
+        setattr(a, name, parsed)
+    if a.since and a.until and a.until <= a.since:
+        ap.error('--until must be later than --since')
     rows = codex(a) if a.framework == 'codex' else claude(a)
     for r in rows:
         print(json.dumps(r))

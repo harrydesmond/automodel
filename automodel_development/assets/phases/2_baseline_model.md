@@ -19,10 +19,10 @@ description: Second phase. Build the baseline and a shared attempt harness, test
   - a completion validator (`done_attempt.sh <attempt_dir>`): exit 0 once the attempt's outcome is recorded — a
     valid result, or a failure recorded with its reason (the review quarantines failures); non-zero if nothing
     usable was recorded, so the launcher retries.
-  Light searches may keep one record per candidate (structure, result, short rationale) and skip cards and the
-  validator file; count fits inside the harness.
-- The harness counts evaluations against the plan's budget and refuses work beyond it; parallel agents share one
-  counter (e.g. under a lock file).
+  Light searches may keep one small append-only file per candidate holding every fit and rescore (with a short
+  rationale) and skip cards and the validator file; count fits inside the harness.
+- The harness counts evaluations against the plan's budget and refuses work beyond it, and refuses new submissions
+  once a STOP file exists; parallel agents and post-processing hooks share one counter (e.g. under a lock file).
 - Heavy searches: it also submits long jobs, leaves `attempt_i/.job` (how to harvest) while one runs, and offers a wait
   command that blocks up to a given time and then reports the job's state.
 

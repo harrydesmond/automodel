@@ -6,6 +6,7 @@ a=$(echo "$p" | grep -oE 'in [^ ,]+/attempt_[0-9]+' | head -1 | cut -c4-)
 case ${FAKE_MODE:-ok} in
   badmodel) echo "error: model 'nope' not found" >&2; exit 1 ;;
   hang) sleep 300; exit 0 ;;
+  stubborn) bash -c 'trap "" TERM; while :; do date +%s%N > "$HB"; sleep 0.2; done' & sleep 300; exit 0 ;;
   flaky) c=${FAKE_COUNTER:?}; n=$(cat "$c" 2>/dev/null || echo 0); echo $((n+1)) > "$c"
          [ "$n" -eq 0 ] && { echo "transient network error" >&2; exit 1; } ;;
 esac
