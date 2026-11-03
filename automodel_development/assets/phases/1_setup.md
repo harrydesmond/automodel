@@ -44,7 +44,8 @@ replication).
   - Hybrid (held-out error plus a penalty): set the penalty against the noise of the held-out score.
 - **Read back the operative rule** in one sentence — "Among candidates satisfying [hard requirements over their
   domain], rank by [score and direction]; [other checks] are reported only" — and show how one known reference is
-  ranked or rejected under it. Changes to this rule later are protocol changes (new version, rescoring).
+  ranked or rejected under it (compute its score if an evaluation takes seconds). Changes to this rule later are
+  protocol changes (new version, rescoring).
 
 ## 4. Splits and external evidence
 - Create the data files the score needs, if any (`train.X`, `validation.X` or folds); guard against leakage (repeat
@@ -67,8 +68,8 @@ Implement or confirm a parameter optimizer (prefer libraries), with seeds, resta
 
 ## 7. Plan and approval
 Copy `assets/RUN_PLAN.md` to the project root and fill it: the light section for a light search (one approval covers
-the whole search), part A for a heavy one (part B follows after Phase 2). Show it and ask the user to approve or amend
-it. Nothing costly runs before approval.
+the whole search), part A for a heavy one (part B follows after Phase 2). Write it and `CONTEXT.md` to disk first, then
+show it and ask the user to approve or amend it. Nothing costly runs before approval.
 
 ## Context dump
 Create `CONTEXT.md` from `assets/CONTEXT.md`: status block and project facts (evaluator commands, data, optimizer),
