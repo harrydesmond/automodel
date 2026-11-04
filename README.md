@@ -16,11 +16,32 @@ For more robust and scalable model and program discovery approaches, consider [O
 
 > 🚧 `automodel` is under construction and experimental. Use at your own risk.
 
+## 🧪 Development version (this branch)
+
+This branch also contains [`automodel_development/`](automodel_development/), a revised skill under test, installed
+as its own skill (`automodel-development`) next to or instead of `automodel`. See
+[`TESTING_development.md`](TESTING_development.md) for installation and feedback. The sections below describe the
+original `automodel/`. The main differences:
+
+- **One approved run plan.** Decisions go into `RUN_PLAN.md`, each marked as chosen by the user, delegated or
+  proposed; nothing costly runs before approval, and no question is silently defaulted. The decision rule is read
+  back on a known reference, naming any references the gates exclude.
+- **Sized to the search.** Light searches (seconds per evaluation) run in-session with one compact plan; heavy ones
+  (long or queued evaluations) add usage accounting and optional detached worker sessions
+  (`scripts/launch_workers.sh`).
+- **Enforced budget and full records.** A shared harness caps fits and wall time, writes one record per fit (screens
+  and failures included) and is tested before the search (`assets/checks.md` has the required core and a conditional
+  menu).
+- **Visible progress.** Reports before each launch and after every meta-iteration, with optional pauses; the search
+  can end on a stop rule, budget or user stop, including with no eligible winner.
+- **Project-level references.** Put references in your project's `references/` folder, not in the skill folder
+  (which every project shares).
+
 ## 🚀 Quick start
 
 Copy the [`automodel/`](automodel/) folder into `.agents/skills/` (or `.claude/skills`). Or use  [Vercel Labs' `skills` package](https://github.com/vercel-labs/skills): `npx skills add unlayer-ai/automodel`.
 
-> 📚 Add any relevant references in `.<agents-OR-claude>/skills/automodel/references/` if you wish to leverage background info.
+> 📚 Add any relevant references in `.<agents-OR-claude>/skills/automodel/references/` if you wish to leverage background info. (`automodel-development` reads them from your project's `references/` instead.)
 
 Then give the agent a concrete modeling goal:
 
