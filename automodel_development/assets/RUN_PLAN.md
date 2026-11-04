@@ -7,7 +7,8 @@
 ## Light search (one compact plan, approved once)
 1. **Goal and data:** <what the model is for; files and rows used>
 2. **Decision rule:** "Among candidates satisfying <hard requirements, over which domain>, rank by <score, direction,
-   tie rule>; <other checks> are reported only." Shown on: <a known reference and how it is ranked or rejected>
+   tie grouping, margin needed to replace the incumbent>; <other checks> are reported only." Shown on: <a known
+   reference, computed if cheap, and how it is ranked or rejected; known references the gates exclude>
 3. **Evaluation:** <evaluator; references; fit settings; external check or "none: exploratory in-sample comparison">
 4. **Work:** <fit cap and elapsed-time cap; initial M, S, I; stop rule; where computation runs>
 5. **Authority and progress:** <what you may change without asking; pause between meta-iterations (default off)>

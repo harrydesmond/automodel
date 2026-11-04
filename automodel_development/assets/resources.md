@@ -35,8 +35,8 @@ supervise attempts:
    `exchange.md` lists components others may import. The launcher takes exclusive ownership (`meta_m/.lock`) before
    starting workers, retries incomplete sessions a bounded number of times, and starts no new session or hook once
    `meta_m/STOP` exists. On interruption it stops its recorded worker process groups and keeps the lock if it cannot
-   confirm they are gone; after a crash, `launch_workers.sh --reclaim meta_m` releases it only when no worker
-   survives. Reconcile submitted jobs before relaunching (harvest a known job; never resubmit one whose receipt is
+   confirm they are gone; after a crash, `launch_workers.sh --reclaim meta_m` releases it only when the registered
+   launcher and the recorded worker groups are no longer alive. Reconcile submitted jobs before relaunching (harvest a known job; never resubmit one whose receipt is
    uncertain without checking); stopping local processes does not cancel queued jobs. A scheduler's "completed" is not
    success: the validator decides.
 4. Watch without spending model calls: once the launcher has registered, `<skill>/scripts/worker_status.sh meta_m
@@ -51,7 +51,7 @@ Input volume ≈ model calls × context per call, and it usually dominates; outp
   notifications. This applies to screens and checks too.
 - Long outputs go to files; print tails (≤ ~40 lines). The harness's record and card replace hand-written tables.
   Keep prose short: plan ≤ 150 words, rationale ≤ 200, `summary.md` ≤ 800, final reply a few lines.
-- Stay within the direction and the budget; no side audits or score-only reruns. If reproduction, provenance or
+- Stay within the direction and the budget; no unplanned side audits or score-only reruns. If reproduction, provenance or
   scoring contradicts the plan, stop the affected comparison, send one short blocker with the evidence, and run only
   the smallest diagnostic needed.
 - An evaluation is finished and recorded before its session ends, or leaves `attempt_i/.job` saying how to harvest it.

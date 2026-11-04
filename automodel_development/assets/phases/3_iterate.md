@@ -25,8 +25,9 @@ description: Third and main phase. Run M meta-iterations of S parallel agents ma
 Each agent works only in `meta_m/agent_s/` and gets: its seed (the baseline, or the seeds the last review chose; with
 several targets, the incumbent for each); its direction and scope limits; relevant `references/` material; the shared
 harness and decision rule; its share of the evaluation budget; the attempt contract — each attempt ends with its
-outcome recorded through the harness (result or recorded failure, short rationale), no job pending, and a structural change, not just a refit; the
-waiting and context rules (`resources.md` §3; for light searches only the output rules matter).
+outcome recorded through the harness (result or recorded failure, short rationale) and no job pending; attempts change
+structure unless the direction explicitly assigns a bounded convergence, recalibration or execution comparison
+(record such gains as what they are, not as structural discoveries); the waiting and context rules (`resources.md` §3; for light searches only the output rules matter).
 
 Before launching, update the `CONTEXT.md` status (active round, protocol version, remaining budget, next action) and
 tell the user: m of M, the current best eligible score, the budget left, and when to expect the next
@@ -39,7 +40,7 @@ update.
   in `resources.md` §2.
 
 ### 2. Attempts (each agent, I times)
-Plan one structural modification from the previous results, especially where the model fits worst; screen cheaply
+Plan one structural modification (or the explicitly assigned control) from the previous results, especially where the model fits worst; screen cheaply
 first if full fits are expensive (within the budget); implement it in `meta_m/agent_s/attempt_i/`; fit and score through
 the harness; continue from the better of this attempt and its parent.
 

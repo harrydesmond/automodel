@@ -29,7 +29,10 @@ description: Second phase. Build the baseline and a shared attempt harness, test
 ## 2. Evaluator tests (required)
 Before any search, test the score and every hard gate on known passes and failures: missing, empty and non-finite
 results must fail; subsets, tie rule and complexity accounting must match the plan; references and candidates go
-through the same code. For a modification that claims to contain the baseline, check that its null setting reproduces
+through the same code. Implement the complete decision rule once — eligibility, tie grouping, and the order of any
+minimum-improvement condition for replacing the incumbent — use it in the collector and in incumbent decisions, and
+test that path on a tiny fixed candidate table (the result must not depend on row order). Tolerance ties are not a
+pairwise approximate-equality sort: "within 1 nat" is not transitive. For a modification that claims to contain the baseline, check that its null setting reproduces
 the baseline; for a replacement structure, run a reference-output smoke test. Keep these as runnable tests.
 
 ## 3. End-to-end pilot

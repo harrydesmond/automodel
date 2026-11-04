@@ -54,6 +54,9 @@ Choose by the cost of a wrong result versus the cost of the check; record what y
   between agents. Before importing another agent's helper or fitted component, check its inputs, units, conventions
   and known or null cases against the shared evaluator; record side calibration data and check alternative sources.
 - *Diagnose failing gates* (e.g. correlate failures with the full model's error) before assigning an agent to them.
+- *Gates as well as the score:* report each leader's search-gate values and eligibility. A candidate failing a hard
+  search gate cannot become the incumbent; keep it only as a labelled exploratory alternative. Keep deferred acceptance
+  checks unevaluated until their authorised phase. Carry any agreed runtime or size ceiling into each direction.
 - *Identifiability:* flag parameters at bounds, running away or trading off; report it for finalists.
 
 **Finalize**
