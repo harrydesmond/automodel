@@ -59,6 +59,10 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
   (`checks.md`, components); choose the next seeds.
 - **Usage**: one line (light) or the usage log (heavy; `resources.md` §6); proposals, screens and scored fits counted
   separately against the budget.
+- **Re-orient** before choosing directions, in `review.md`: what the results, failures included, imply about the
+  mechanism and which families are now less plausible; whether gains are structural or come from added flexibility
+  (compare at matched complexity); remaining systematic residuals; whether the variables or representation should
+  change; which experiment would be most informative next. Distinguish incremental refinements from fundamental changes.
 - **Re-plan** (`resources.md` §7) and apply the stop rule. Use a fresh reviewer (new session or another framework)
   when the data, evaluator or protocol changed, a result is disputed, or the stakes warrant it.
 - Write `meta_m/review.md` (results table, what worked and did not, decisions), then update the `CONTEXT.md` status

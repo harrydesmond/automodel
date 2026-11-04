@@ -13,7 +13,7 @@ Copy to the project root; tick as you go (status details live in `CONTEXT.md`).
 
 ## Phase 3 — Iterate (per meta-iteration)
 - [ ] Status checkpointed and progress reported before launch; agents launched within the budget
-- [ ] Review: invalid attempts quarantined, shortlist refitted, recombination, usage, re-plan, `meta_m/review.md`; status checkpointed
+- [ ] Review: invalid attempts quarantined, shortlist refitted, recombination, re-orientation, usage, re-plan, `meta_m/review.md`; status checkpointed
 - [ ] Progress message sent; paused if the plan says so
 - [ ] At the end: search summary to the user; servers, jobs and processes stopped
 
