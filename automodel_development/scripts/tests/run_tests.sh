@@ -19,6 +19,20 @@ setup; rm meta_1/done_attempt.sh; check "refuses to start without a completion v
 setup; rc=$(run); check "normal run: exit 0, all attempts and summaries" '[ "$rc" = 0 ] && [ -s meta_1/agent_2/summary.md ] && [ -f meta_1/agent_1/attempt_2/result.json ]'
 check "manifest records start/end of every session" '[ "$(grep -c "\"event\":\"end\"" meta_1/launch_manifest.jsonl)" = 6 ]'
 check "status counts validated attempts" 'bash "$S/worker_status.sh" meta_1 | grep -q "agent 1: 2/2 validated"'
+setup
+mkdir -p meta_1/agent_1/attempt_1 meta_1/agent_1/attempt_1b
+for a in attempt_1 attempt_1b; do echo '{"status":"ok"}' > "meta_1/agent_1/$a/result.json"; done
+check "status counts numbered attempts, not their variants" 'bash "$S/worker_status.sh" meta_1 | grep -q "agent 1: 1/2 validated"'
+setup
+for i in 1 2; do mkdir -p "meta_1/agent_1/attempt_$i"; echo '{"status":"ok"}' > "meta_1/agent_1/attempt_$i/result.json"; done
+echo stale > meta_1/agent_1/summary.md
+rc=$(run 1)
+check "stale summary triggers a final summary session" '[ "$rc" = 0 ] && [ -f meta_1/agent_1/.summary.done ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 1 ] && grep -q stale meta_1/agent_1/summary.previous.*'
+setup
+for i in 1 2; do mkdir -p "meta_1/agent_1/attempt_$i"; echo '{"status":"ok"}' > "meta_1/agent_1/attempt_$i/result.json"; done
+echo stale > meta_1/agent_1/summary.md
+rc=$(FAKE_MODE=empty run 1)
+check "stale summary cannot satisfy an empty final-summary session" '[ "$rc" = 1 ] && [ ! -f meta_1/agent_1/.summary.done ]'
 setup; rc=$(FAKE_MODE=empty run); check "empty outputs are not success (exit 1)" '[ "$rc" = 1 ] && grep -q FAILED meta_1/failed.log'
 setup; rc=$(FAKE_MODE=badmodel run); check "configuration error fails at once" '[ "$rc" = 1 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 1 ]'
 setup; rc=$(FAKE_MODE=flaky FAKE_COUNTER=$T/cnt run 1); check "transient failure is retried" '[ "$rc" = 0 ]'; rm -f "$T/cnt"
@@ -28,7 +42,7 @@ setup; touch meta_1/STOP; rc=$(run); check "STOP: nothing starts, exit 3" '[ "$r
 setup; FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/launch.log 2>&1 & L=$!; sleep 2
 check "second launcher refused while one runs" '[ "$(run)" = 1 ]'
 kill -TERM $L; wait $L 2>/dev/null; sleep 1
-check "launcher TERM stops its workers and releases the lock" '! pgrep -x sleep -a 2>/dev/null | grep -q "sleep 300" && [ ! -d meta_1/.lock ]'
+check "launcher TERM stops its workers and releases the lock" '! pgrep -x sleep -a 2>/dev/null | grep -qx "[0-9]* sleep 3187" && [ ! -d meta_1/.lock ]'
 setup; export HB=$T/hb; FAKE_MODE=stubborn bash "$S/launch_workers.sh" meta_1 1 > meta_1/launch.log 2>&1 & L=$!; sleep 2
 kill -TERM $L; wait $L 2>/dev/null; sleep 1; h1=$(cat "$HB"); sleep 1; h2=$(cat "$HB")
 check "TERM-ignoring descendant is stopped (heartbeat ends)" '[ "$h1" = "$h2" ] && [ ! -d meta_1/.lock ]'

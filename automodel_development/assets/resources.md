@@ -26,11 +26,12 @@ supervise attempts:
 1. Write `meta_m/COMMON_PROMPT.md` (harness, decision rule, budget, how to wait, what an attempt leaves on disk,
    the `summary.md` specification, scope limits), `meta_m/agent_s/DIRECTION.md`, `meta_m/agents.conf` and the
    harness's validator `meta_m/done_attempt.sh` (formats in the header of `<skill>/scripts/launch_workers.sh`).
-2. Agree the workers' permissions with the user: write roots, network and compute access, the least the runtime
+2. Use the plan's approved worker permissions: write roots, network and compute access, the least the runtime
    supports. Needing the network is not a reason to drop every boundary. The launcher needs bash ≥ 4, `pgrep` and
    `setsid` (Linux; on macOS install a newer bash). If the approved configuration is unavailable, run in-session or
    sequentially instead.
-3. Launch `setsid nohup <skill>/scripts/launch_workers.sh meta_m > meta_m/launch.log 2>&1 < /dev/null &`. Each attempt
+3. From a session whose processes may outlive their command (`frameworks.md`), use a validated project launcher with
+   this contract, or launch `setsid nohup <skill>/scripts/launch_workers.sh meta_m > meta_m/launch.log 2>&1 < /dev/null &`. Each attempt
    is a fresh non-interactive session; memory between attempts is the agent's `notes.md` (≤ 300 words) and
    `exchange.md` lists components others may import. The launcher takes exclusive ownership (`meta_m/.lock`) before
    starting workers, retries incomplete sessions a bounded number of times, and starts no new session or hook once
@@ -39,16 +40,15 @@ supervise attempts:
    launcher and the recorded worker groups are no longer alive. Reconcile submitted jobs before relaunching (harvest a known job; never resubmit one whose receipt is
    uncertain without checking); stopping local processes does not cancel queued jobs. A scheduler's "completed" is not
    success: the validator decides.
-4. Watch without spending model calls: once the launcher has registered, `<skill>/scripts/worker_status.sh meta_m
-   --wait <s>` returns when it exits, a failure is logged or <s> pass (at once if no launcher runs) (in Claude Code run it in the background; its completion notice wakes the session;
-   in Codex, wait with the sleep tool for a time chosen from the observed attempt durations, then run it once).
-   Report progress at the agreed cadence; review when all agents finish.
+4. Watch with `<skill>/scripts/worker_status.sh meta_m` at the agreed cadence (`frameworks.md`); `--wait <s>` returns
+   on launcher exit, failure or timeout. Review when all agents finish.
 
 ## 3. Waiting and context rules (for prompts and COMMON_PROMPT.md)
-Input volume ≈ model calls × context per call, and it usually dominates; output is far smaller (though priced higher).
-- Never poll at short intervals. Wait for a long command with one blocking wait matched to its expected remaining
-  duration and the delay you can tolerate in noticing it, then one short status check; prefer completion
-  notifications. This applies to screens and checks too.
+Input ≈ model calls × context per call. Price uncached input, cache writes/reads and output separately; gross tokens
+alone do not measure cost.
+- Avoid repeated model calls merely to poll. Prefer completion notifications; otherwise match waits to expected
+  remaining time, acceptable detection delay and session limits, then check once. This includes screens and checks;
+  a shell watcher may poll internally without waking the model.
 - Long outputs go to files; print tails (≤ ~40 lines). The harness's record and card replace hand-written tables.
   Keep prose short: plan ≤ 150 words, rationale ≤ 200, `summary.md` ≤ 800, final reply a few lines.
 - Stay within the direction and the budget; no unplanned side audits or score-only reruns. If reproduction, provenance or
@@ -66,8 +66,8 @@ models (`frameworks.md`), not tiers. None of these allocations has been compared
 ## 5. Budget and estimates
 - The approved evaluation budget (screens and scored fits per attempt; run-wide fit, wall-time and compute caps,
   counting baselines, failures, refits and recombinations) is enforced by the harness, not only estimated.
-- Estimate from a representative scored attempt (proposal, screening, queue, fitting, harvesting) plus setup and
-  review; name what is unmeasured, and update after the first meta-iteration.
+- Estimate from a representative scored attempt plus setup, review and agreed finalization; state unknowns and
+  update after the first meta-iteration.
 - Usage ≈ S × I × usage per attempt + the meta-agent. Wall time ≈ the slowest agent's chain: I × (agent work + queue +
   evaluation + time to notice) + review. Compute ≈ evaluations × cost. Parallelism (agents, or variants per attempt
   evaluated together) buys progress per hour with usage and compute; sequence costs wall time.
@@ -87,6 +87,6 @@ supplies them.
 ## 7. Re-plan at every boundary
 Re-choose directions, S, I and allocations from the last meta-iteration. Retire a direction when the evidence says its
 premise is wrong or another component limits it, not merely because one round gained nothing; keep a bounded share
-for distinct untested hypotheses, and record why each direction continues, merges or stops. Treat many wasted fits as
-a call for better screening instructions, not a bigger model. Report the new plan in the progress message; ask the
-user only for changes outside the delegated scope or a material budget increase.
+for distinct untested hypotheses, and record why each direction continues, merges or stops. Diagnose wasted fits before
+changing screening instructions or agent-model allocation. Review persistent gate failures; propose continued work, a changed
+requirement or no eligible result. Report the plan; obtain approval for changes outside delegated scope.

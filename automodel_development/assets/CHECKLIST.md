@@ -15,8 +15,9 @@ Copy to the project root; tick as you go (status details live in `CONTEXT.md`).
 - [ ] Status checkpointed and progress reported before launch; agents launched within the budget
 - [ ] Review: invalid attempts quarantined, shortlist refitted, recombination, re-orientation, usage, re-plan, `meta_m/review.md`; status checkpointed
 - [ ] Progress message sent; paused if the plan says so
-- [ ] At the end: search summary to the user; servers, jobs and processes stopped
+- [ ] At the end: authorised consolidation, finalists and trade-offs reported; owned jobs and processes stopped
 
 ## Phase 4 — Finalize
+- [ ] Applicable validation, freeze, pre-registration and clean-checkout checks completed, or omissions recorded
 - [ ] Final checks done within the authorised allowance, or omitted with the reason recorded (or the winner re-verified and labelled exploratory)
 - [ ] Outcome (eligible winner, or none) with metrics, claims and limitations recorded

@@ -8,14 +8,14 @@ description: First phase. Agree the goal, data, decision rule, external evidence
 # Phase 1 — Setup
 
 Reuse answers the user has already given (in this conversation, project instructions or memory) and mark them
-[user chose] or [delegated]; ask only what is open. Ask related questions together, and follow up on any that come back
-skipped or partly answered.
+[user chose] or [delegated]; ask only what is open. Ask related questions together, listed explicitly in your message, and follow up on any that
+come back skipped or partly answered.
 
 ## 0. Feasibility and size
 - Confirm language/runtime and libraries, and whether sub-agents can be spawned with file and shell access. If not,
   agents run sequentially in this session; record that. Heavy searches with detached workers: check the platform
   (bash ≥ 4, `pgrep`, `setsid`) and which permission settings the user will approve.
-- Estimate (or ask) how long one evaluation (a fit plus scoring) takes and where it runs, and classify the search as
+- Time one evaluation (a fit plus scoring) if it takes seconds; otherwise estimate or ask how long it takes and where it runs, and classify the search as
   light or heavy (`assets/resources.md` §1). Heavy: ask the user's limits on usage, wall time and compute, and read
   `assets/frameworks.md` for this framework's mechanics.
 
@@ -32,7 +32,8 @@ replication).
 ## 3. Objective
 - **Training loss** and **reported metrics**; always include runtime and memory per evaluation.
 - **Requirements**: decide for each whether it is a hard gate (candidates failing it are rejected), part of the score,
-  or reported only.
+  or reported only; specify its statistic, population and evaluation phase. Downstream-impact claims require a
+  representative analysis, including its likelihood and priors; otherwise label them diagnostic.
 - **Selection score**:
   - Not complexity-penalised (RMSE, log-loss, …): for predictive selection, measured out of sample on a validation
     set or by (grouped, stratified or time-ordered) cross-validation. A deliberately descriptive in-sample comparison
@@ -56,7 +57,7 @@ replication).
   "exploratory, no independent check"; record what the criterion does not pay for (the number of candidates tried).
 - A reserved dataset is excluded from the agents' inputs and refused by the evaluator before any scoring, references
   included. Record earlier exposure (e.g. benchmarking references on it) and sibling runs sharing it, and state what
-  may be refitted at the final check.
+  may be refitted at the final check. For later independent claims, plan access to fresh evidence.
 
 ## 5. Optimization routine
 Implement or confirm a parameter optimizer (prefer libraries), with seeds, restarts and a stop criterion.

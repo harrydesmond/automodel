@@ -2,35 +2,38 @@
 name: finalize
 entry: The search ended (stop rule, budget, or the user's instruction); CONTEXT.md records the best eligible candidate, or that none exists.
 exit: Outcome, metrics, limitations and job status recorded in CONTEXT.md.
-description: Fourth and final phase. Pre-register, apply the agreed external check to an authorised frozen candidate, decide, and record the outcome, including exploratory or unsuccessful ones.
+description: Fourth and final phase. Validate and freeze authorised finalists, apply any agreed external check, and record the outcome, including an unsuccessful one.
 ---
 
 # Phase 4 — Finalize
 
-## 1. Pre-register (if there is an external check)
-Before it, record (and commit, under version control) the candidates to test, the baseline treated the
-same way, the decision rule and the claims. If a final refit frees constants or changes structure, validate the result
-before the check: the model tested must be the model selected.
+## 1. Validate and freeze
+All final work uses the agreed remaining or reserved allowance and obeys the latest stop instruction. If no eligible
+candidate exists, record that without another fit. Unused reserves stay sealed.
 
-## 2. External check
-Final checks and refits use only an agreed remaining or reserved allowance and obey the user's latest stop
-instruction. Apply the agreed check to the authorised frozen candidate(s): the held-out set, independent data, or
-out-of-range constraints, reporting all agreed metrics including runtime and memory. Without an external check, verify
-the winner from its recorded parameters, score and completed convergence checks (fit again only within the allowance)
-and state that its score is optimistic because of the search; otherwise close from the validated records and say what
-was not rechecked. If no eligible candidate exists, record that without another fit. Unused reserved data stay sealed.
+For authorised finalists, exercise the acceptance driver and deployed interface on development data, including
+relevant branches and boundaries. Record failures; repair only within scope, then revalidate and freeze the model,
+fitted state and evaluation dependencies (the model tested must be the model selected). Verify their identities when evaluating or reporting. For heavy searches,
+generate the gate decision from complete records; missing, non-finite or insufficient coverage cannot pass.
 
-## 3. Decide
-- Validation-to-test shrinkage is normal; agreement shows consistency, not absence of selection bias.
-- If held-out results guide further selection, those data become development evidence: an independent predictive
-  claim then needs fresh data. Deterministic constraints (positivity, symmetries) may be reused as acceptance tests;
-  once they guide revisions, record them as selection requirements.
-- After a data or evaluator correction: keep the original results, record the change, recheck the frozen candidates
-  and the reference under the same rule and label the check as reused. Structures or rules chosen from those outcomes
-  need fresh independent evidence, or are reported as exploratory.
+## 2. External check, if agreed
+Before opening reserved evidence, record candidates, baseline, decision rule and claims in version control and have
+the user approve this pre-registration (approving the external check at setup does not cover it). Check a
+clean checkout can recover the approved inputs and run the checks, using tracked files or documented immutable assets.
+Apply the pre-registered check and report all agreed metrics.
+
+Without external evidence, reverify the winner from its records within the allowance; identify anything not rechecked
+and qualify predictive claims for adaptive selection. Validation gains can shrink on independent data; agreement does not prove absence of selection bias.
+A failed gate stays failed: report it and let the user choose between accepting the disclosed limitation and changing
+the candidate, which then needs new independent evidence.
+
+## 3. Corrections and later versions
+Preserve original outcomes and version changes. Recheck affected claims and test preserved behaviour to the declared
+tolerance. Corrected evaluation of frozen candidates and the reference may reuse evidence, labelled as such. Data used to choose revisions
+become development evidence; new independent predictive claims need fresh evidence or an exploratory label.
+Deterministic constraints remain reusable. Re-reading a spent set for added statistics needs the user's approval and a label.
 
 ## 4. Record
-In `CONTEXT.md`: decision (accept / exploratory result / no useful improvement / do not use), selected model and usage
-entry point, validation and external metrics, interpretation of the difference, which claims were checked on what
-(sampled accuracy is not a region-wide guarantee), main limitations, and confirmation that no job or process is left
-running. See `assets/checks.md`, Finalize, for stress tests and audits that may apply.
+In `CONTEXT.md`: decision (accept / exploratory / no useful improvement / do not use), selected model and entry point,
+metrics, checked claims and their populations, limitations, and job status. Sampled accuracy is not a region-wide
+guarantee. Stop owned jobs and processes. See `checks.md` for conditional stress tests and audits.

@@ -31,7 +31,10 @@ tail -n 1 "$META/launch.log" 2>/dev/null | grep -q "all agents finished" && echo
 for d in $(ls -d "$META"/agent_* 2>/dev/null | sort -V); do
     s=${d##*_}
     tot=$(awk -v s="$s" '{sub(/#.*/,"")} $1==s{print ($5?$5:"'${AM_ATTEMPTS:-5}'")}' "$META/agents.conf" 2>/dev/null)
-    n=0; for a in "$d"/attempt_*; do [ -d "$a" ] && "$META/done_attempt.sh" "$a" >/dev/null 2>&1 && n=$((n+1)); done
+    n=0; for a in "$d"/attempt_*; do
+        [[ "${a##*/}" =~ ^attempt_[0-9]+$ ]] || continue
+        [ -d "$a" ] && "$META/done_attempt.sh" "$a" >/dev/null 2>&1 && n=$((n+1))
+    done
     cur=$(ls -d "$d"/attempt_* 2>/dev/null | sort -V | tail -1)
     st=""; [ -n "$cur" ] && [ -f "$cur/.job" ] && st="(job pending)"
     card=$(ls -t "$d"/attempt_*/card.md 2>/dev/null | head -1)

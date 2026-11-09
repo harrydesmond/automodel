@@ -12,13 +12,13 @@ description: Second phase. Build the baseline and a shared attempt harness, test
 - A **shared attempt harness** that every agent calls instead of writing its own driver. Given a candidate (a source
   file, expression or configuration), it fits, scores under the plan's decision rule, and writes:
   - one structured **record per fit**, screens and failures included: stable candidate and fit IDs, proposer, stage
-    (screen / scored / refit / reference), status, model, data and protocol identity, settings, seed, metrics and stop
-    reason. Write records atomically (one file per fit, or an append the platform guarantees); one collector builds
+    (screen / scored / refit / reference), status, model, data and protocol identity, settings, seed, fitted state or an immutable artifact reference when available, metrics and stop reason. Write records atomically (one file per fit, or an append the platform guarantees); one collector builds
     tables and checks counts. Refits and rescores add records; they never overwrite.
   - a metrics card (`card.md`, first line a one-line summary) generated from the record;
-  - a completion validator (`done_attempt.sh <attempt_dir>`): exit 0 once the attempt's outcome is recorded — a
-    valid result, or a failure recorded with its reason (the review quarantines failures); non-zero if nothing
-    usable was recorded, so the launcher retries.
+  - a completion validator (`done_attempt.sh <attempt_dir>`): exit 0 only when every required variant/control has a
+    validated result or recorded failure and no job remains pending; otherwise non-zero. Review quarantines failures.
+  It also offers a command that records a failure it cannot detect itself (e.g. a lost job) with its reason; agents
+  never write records or results by hand.
   Light searches may keep one small append-only file per candidate holding every fit and rescore (with a short
   rationale) and skip cards and the validator file; count fits inside the harness.
 - The harness counts evaluations against the plan's budget and refuses work beyond it, and refuses new submissions
@@ -27,9 +27,7 @@ description: Second phase. Build the baseline and a shared attempt harness, test
   command that blocks up to a given time and then reports the job's state.
 
 ## 2. Evaluator tests (required)
-Before any search, test the score and every hard gate on known passes and failures: missing, empty and non-finite
-results must fail; subsets, tie rule and complexity accounting must match the plan; references and candidates go
-through the same code. Implement the complete decision rule once — eligibility, tie grouping, and the order of any
+Run the required evaluator checks in `assets/checks.md`. Implement the complete decision rule once — eligibility, tie grouping, and the order of any
 minimum-improvement condition for replacing the incumbent — use it in the collector and in incumbent decisions, and
 test that path on a tiny fixed candidate table (the result must not depend on row order). Tolerance ties are not a
 pairwise approximate-equality sort: "within 1 nat" is not transitive. For a modification that claims to contain the baseline, check that its null setting reproduces
@@ -48,8 +46,7 @@ that will be incumbents. If this will take much longer than the plan said, tell 
 where the baseline fails (by region, group or regime) and how much error comes from any component that stays fixed.
 
 ## 5. Calibration and approval (heavy)
-Estimate a representative scored attempt (proposal, screening, queue, fitting, harvesting) plus setup and review, and
-name what is unmeasured. Fill `RUN_PLAN.md` part B (`assets/phases/3_iterate.md` Setup) and get it approved.
+Update the estimates using `resources.md` §5. Fill `RUN_PLAN.md` part B and get it approved.
 
 ## Context dump
 Update the status block and project facts in `CONTEXT.md`: baseline and reference scores, evaluation time and memory,

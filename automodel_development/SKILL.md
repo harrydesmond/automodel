@@ -40,16 +40,12 @@ sub-agents.
   the user's review if the plan says so (default: light searches continue, heavy searches pause). A stop request takes
   effect before any further submission.
 
-## Search size
-Phase 1 classifies the search as light (in-session agents, one compact plan) or heavy (two-step approval, usage
-accounting, detached workers when evaluations are long); see `assets/resources.md` §1.
-
 ## Supporting files
 - `assets/RUN_PLAN.md`: plan template. `assets/checks.md`: required evaluator checks and a menu of conditional ones.
-- `assets/resources.md`: size, orchestration, waiting, models, budgets, usage accounting, re-planning.
+- `assets/resources.md`: search size (light or heavy), orchestration, waiting, models, budgets, usage accounting, re-planning.
 - `assets/frameworks.md`: Claude Code and Codex mechanics (sub-agents, detached workers, waits, permissions, usage).
 - `<skill>/scripts/`: `launch_workers.sh` and `worker_status.sh` (detached workers, run from the project root),
   `usage_report.py` (token usage from local session logs), `tests/run_tests.sh` (their fixture tests).
-- `TIPS.md`: optional practices (uncertainty, leaderboards, trivial baselines).
+- `TIPS.md`: optional practices (uncertainty, reference models).
 - References: the user may put papers, code or earlier results in the project's `references/` folder (never in this
   skill's folder, which every project shares); phases say when to read them.

@@ -2,6 +2,7 @@
 # Detached automodel workers for one meta-iteration (assets/resources.md §2, hybrid mode).
 # Per agent: one fresh non-interactive session per attempt (memory = notes.md, sharing = exchange.md), then a summary
 # session, then the optional hook <meta_dir>/after_agent.sh <agent_dir>. Re-running continues from validated state.
+# Summary completion needs the launcher-owned .summary.done receipt; attempt sessions invalidate it.
 #
 #   setsid nohup <skill>/scripts/launch_workers.sh meta_3 > meta_3/launch.log 2>&1 < /dev/null &
 #   <skill>/scripts/launch_workers.sh meta_3 2 5          # only agents 2 and 5 (when no launcher runs on meta_3)
@@ -10,9 +11,8 @@
 # Run from the project root. Required in <meta_dir>:
 #   agents.conf      one line per agent: <s> <cli: codex|claude> <model> [effort or -] [attempts]   (# comments allowed)
 #   COMMON_PROMPT.md, agent_<s>/DIRECTION.md
-#   done_attempt.sh  executable; exit 0 once the harness has recorded <attempt_dir>'s outcome (a valid result, or a
-#                    failure with its reason); non-zero if nothing usable is recorded (then the session is retried).
-#                    Prose files are not evidence.
+#   done_attempt.sh  executable; exit 0 only when all required variants/controls have validated results or recorded
+#                    failures and no job remains pending; otherwise non-zero for recovery. Prose is not evidence.
 # Optional: after_agent.sh <agent_dir> (e.g. a refit of the agent's best attempt for the review); hooks submit work only
 #   through the harness, which applies the same budget and STOP checks.
 # Ownership: an atomic lock directory <meta_dir>/.lock (launcher PID, one process group per agent). Workers run in their
@@ -21,7 +21,7 @@
 #   from their recorded receipts.
 # Permissions (explicit, approved by the user):
 #   AM_CLAUDE_FLAGS  required for cli=claude, e.g. "--permission-mode acceptEdits --allowedTools Bash(python3:*)"
-#   AM_CODEX_FLAGS   default "-s workspace-write" (no network); widen only as approved
+#   AM_CODEX_FLAGS   default "-s workspace-write": no network, background jobs die with their command; widen as approved
 # Other environment: AM_ATTEMPTS (5), AM_RETRY_WAIT (s, 1800), AM_MAX_TRIES (8), AM_STAGGER (s between agents, 20).
 # Exit status: 0 all agents finished, 1 failures (see failed.log), 3 stopped by STOP.
 set -u
@@ -88,7 +88,12 @@ manifest() { printf '{"time":"%s","meta":"%s","agent":%s,"label":"%s","cli":"%s"
 fail() { echo "$(date '+%F %T') agent $1 FAILED: $2" | tee -a "$META/agent_$1/sessions.log" >> "$META/failed.log"; return 1; }
 
 run_session() {  # agent, label, prompt
-    local s=$1 lab=$2 p=$3 d=$META/agent_$1 rc
+    local s=$1 lab=$2 p=$3 d=$META/agent_$1 rc previous
+    rm -f "$d/.summary.done" || return 1
+    if [ "$lab" = summary ] && [ -e "$d/summary.md" ]; then
+        previous=$(mktemp "$d/summary.previous.XXXXXX") || return 1
+        mv -- "$d/summary.md" "$previous" || return 1
+    fi
     manifest "$s" "$lab" start
     case ${CLI[$s]} in
         codex) codex exec -m "${MODEL[$s]}" ${EFFORT[$s]:+-c "model_reasoning_effort=\"${EFFORT[$s]}\""} \
@@ -97,7 +102,11 @@ run_session() {  # agent, label, prompt
         claude) claude -p "$p" --model "${MODEL[$s]}" ${EFFORT[$s]:+--effort "${EFFORT[$s]}"} $AM_CLAUDE_FLAGS \
                    < /dev/null > "$d/.reply_$lab.md" 2>> "$d/session_$lab.log" ;;
     esac
-    rc=$?; log "$s" "$lab session exit $rc"; manifest "$s" "$lab" end "$rc"
+    rc=$?
+    if [ "$lab" = summary ] && [ "$rc" -eq 0 ] && [ -s "$d/summary.md" ]; then
+        touch "$d/.summary.done" || rc=1
+    fi
+    log "$s" "$lab session exit $rc"; manifest "$s" "$lab" end "$rc"
     return $rc
 }
 
@@ -125,16 +134,15 @@ agent_loop() {
     for i in $(seq 1 "$n"); do
         a=$d/attempt_$i
         session_until "$s" "a$i" "'$META/done_attempt.sh' '$a'" "You are agent $s of meta-iteration $META of an automodel search; \
-project directory $ROOT. Read $META/COMMON_PROMPT.md and $d/DIRECTION.md, then $d/notes.md and the records of your \
-earlier attempts (if any), and the other agents' $META/agent_*/exchange.md. Carry out ATTEMPT $i ONLY, in $a, as those \
-files specify, within the evaluation budget they state. If $a/.job exists, an evaluation is already running or finished: \
+project directory $ROOT. Read $META/COMMON_PROMPT.md and $d/DIRECTION.md, then $d/notes.md and the earlier records it points to, and the other agents' $META/agent_*/exchange.md. Complete attempt $i in $a, including assigned variants and controls in their declared paths; \
+start no later numbered attempt. Count every fit against the stated budget. If $a/.job exists, an evaluation is already running or finished: \
 harvest it as COMMON_PROMPT.md describes and never resubmit it. If $META/STOP appears, submit nothing new. Finish only \
 when $a holds a complete result (the harness's validator passes), no job of yours is pending, $d/notes.md is updated \
 (<= 300 words: current best, what worked, queue of next hypotheses) and $d/exchange.md lists any component worth \
 sharing (file, parameter map, effect). Final reply: at most five lines."
         rc=$?; [ $rc -ne 0 ] && return $rc
     done
-    session_until "$s" summary "[ -s '$d/summary.md' ]" "You are agent $s of meta-iteration $META of an automodel search; \
+    session_until "$s" summary "[ -s '$d/summary.md' ] && [ -f '$d/.summary.done' ]" "You are agent $s of meta-iteration $META of an automodel search; \
 project directory $ROOT. All $n attempts in $d are finished. Read $META/COMMON_PROMPT.md (its summary specification), \
 $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.md. No new evaluations."
     rc=$?; [ $rc -ne 0 ] && return $rc
