@@ -3,7 +3,8 @@
 #   bash <skill>/scripts/tests/run_tests.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd); S=$HERE/..; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/bin"; cp "$HERE/fake_codex" "$T/bin/codex"; chmod +x "$T/bin/codex"; export PATH="$T/bin:$PATH"
+mkdir -p "$T/bin"; cp "$HERE/fake_codex" "$T/bin/codex"; cp "$HERE/fake_claude" "$T/bin/claude"; chmod +x "$T/bin/codex" "$T/bin/claude"
+export PATH="$T/bin:$PATH"
 export AM_RETRY_WAIT=0 AM_MAX_TRIES=2 AM_STAGGER=0
 pass=0; failn=0
 check() { if eval "$2"; then pass=$((pass+1)); echo "ok   $1"; else failn=$((failn+1)); echo "FAIL $1"; fi; }
@@ -91,4 +92,19 @@ mf=$HOME/.codex/sessions/2026/01/01/rollout-2026-01-01T09-00-00-m.jsonl
   printf '{"timestamp":"2026-01-01T13:00:00Z","type":"turn_context","payload":{"model":"B","effort":"high"}}\n'; tc 2026-01-01T13:30:00Z 6 10 0; } > "$mf"
 out=$(python3 "$S/usage_report.py" codex --session "$mf" --since 2026-01-01T10:00 --until 2026-01-01T12:00)
 check "usage: model label from counted calls only" 'echo "$out" | head -1 | grep -q "\"model\": \"A\", \"effort\": \"low\""'
+# claude workers: usage-limit waits, phase sessions with a job_state hook, isolation flags
+csetup() { setup; printf '1 claude m - 1' > meta_1/agents.conf; export AM_CLAUDE_FLAGS="--x"; rm -f "$T/cnt" "$T/args" "$T/prompts"; }
+csetup; rc=$(FAKE_MODE=limit FAKE_LIMITS=4 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=0 AM_MAX_TRIES=1 run 1)
+check "usage limit: waits without spending retries, then finishes" '[ "$rc" = 0 ] && [ "$(grep -c "usage/rate limit" meta_1/agent_1/sessions.log)" = 4 ]'
+csetup; rc=$(FAKE_MODE=limit FAKE_LIMITS=4 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=0 AM_LIMIT_MAX_H=0 AM_MAX_TRIES=1 run 1)
+check "usage limit: zero waiting budget falls back to the retry cap" '[ "$rc" = 1 ]'
+csetup; printf '#!/bin/sh\nf="$1/.running"; [ -f "$f" ] || exit 2\nn=$(cat "$f"); if [ "$n" -gt 0 ]; then echo $((n-1)) > "$f"; exit 0; fi; rm -f "$f"; exit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
+rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_JOB_POLL=0 AM_MAX_TRIES=1 run 1)
+check "phase sessions: end at a job, resume when it finishes, no retry spent" '[ "$rc" = 0 ] && [ -f meta_1/agent_1/attempt_1/result.json ] && grep -q "resumes after jobs" meta_1/agent_1/sessions.log'
+check "phase sessions: the resume session gets the resume prompt and the hand-off rule" 'grep -q "Resume attempt 1" "$T/prompts" && grep -q "end the session" "$T/prompts"'
+csetup; rc=$(FAKE_ARGS=$T/args run 1)
+check "isolation: claude workers exclude outside instruction files, memory, skills and MCP" '[ "$rc" = 0 ] && grep -q -- "--disable-slash-commands" "$T/args" && grep -q "claudeMdExcludes" "$T/args" && grep -q "autoMemoryEnabled" "$T/args"'
+csetup; rc=$(FAKE_ARGS=$T/args AM_ISOLATE=0 run 1)
+check "isolation can be switched off" '[ "$rc" = 0 ] && ! grep -q "claudeMdExcludes" "$T/args"'
+unset AM_CLAUDE_FLAGS
 cd /; echo "passed $pass, failed $failn"; [ "$failn" -eq 0 ]

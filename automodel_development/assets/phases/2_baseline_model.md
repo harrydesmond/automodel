@@ -23,8 +23,12 @@ description: Second phase. Build the baseline and a shared attempt harness, test
   rationale) and skip cards and the validator file; count fits inside the harness.
 - The harness counts evaluations against the plan's budget and refuses work beyond it, and refuses new submissions
   once a STOP file exists; parallel agents and post-processing hooks share one counter (e.g. under a lock file).
-- Heavy searches: it also submits long jobs, leaves `attempt_i/.job` (how to harvest) while one runs, and offers a wait
-  command that blocks up to a given time and then reports the job's state.
+- Heavy searches: it also submits long jobs, leaves `attempt_i/.job` (how to harvest) while one runs, offers a wait
+  command that blocks up to a given time and then reports the job's state, and a non-blocking job-state command
+  (running / finished but not collected / none) for the launcher's `job_state.sh` hook. When the evaluation runs
+  elsewhere (a cluster), it checks that the remote code matches the local code before every submission.
+- The card carries the diagnostics agents need most (error breakdowns by the main data dimensions and by the
+  regions the requirements single out), so agents do not each re-derive them in their sessions.
 
 ## 2. Evaluator tests (required)
 Run the required evaluator checks in `assets/checks.md`. Implement the complete decision rule once — eligibility, tie grouping, and the order of any

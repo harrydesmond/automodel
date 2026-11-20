@@ -24,7 +24,8 @@
 6. **External evidence:** <reserved data and how it is locked; prior exposure (e.g. reference benchmarking, sibling
    runs on the same pool); what may be refitted at the final check; fresh-evidence access for later claims; or none, with what that leaves unpriced>
 7. **Evaluation budget:** <screens and scored fits per attempt; run-wide fit, wall-time and compute caps, counting
-   baselines, failures, refits and recombinations; seeds/restarts per stage>
+   baselines, failures, refits and recombinations; seeds/restarts per stage>. **Token budget** (guide, not enforced):
+   <per meta-iteration; reported against actual after each one>
 8. **References:** <which, at which settings; expected time>
 9. **Execution:** <where computation runs; worker permissions (write roots, network, compute) if detached>
 10. **Checks:** <adopted from checks.md; N/A because …>

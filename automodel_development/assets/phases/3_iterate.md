@@ -32,8 +32,9 @@ update.
 
 - **In-session:** launch the S sub-agents in parallel in one message, fresh for each meta-iteration. If a usage limit
   stops them, resume each after the reset with an instruction to harvest pending jobs first.
-- **Detached (heavy):** preflight each seed through the harness to reproduce its score; prepare launch inputs,
-  launch and watch as in `resources.md` §2.
+- **Detached (heavy):** preflight each seed through the harness to reproduce its score; prepare launch inputs
+  (with `job_state.sh` when evaluations are scheduler jobs, so sessions end at job boundaries; the token budget's soft
+  guide in COMMON_PROMPT.md), launch and watch as in `resources.md` §2.
 
 ### 2. Attempts (each agent, I times)
 Plan one structural modification (or the explicitly assigned control) from the previous results, especially where the model fits worst; screen cheaply
@@ -54,7 +55,8 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
 - **Recombine** compatible parts of different agents' candidates (often the winners), checking imported helpers
   (`checks.md`, components); choose the next seeds.
 - **Usage**: one line (light) or the usage log (heavy; `resources.md` §6); proposals, screens and scored fits counted
-  separately against the budget.
+  separately against the budget; tokens against the meta-iteration's token budget (a guide, never enforced), with the
+  calls and context that drove them.
 - **Re-orient** before choosing directions, in `review.md`: what the results, failures included, imply about the
   mechanism and which families are now less plausible; whether gains are structural or come from added flexibility
   (use matched parent refits and, where relevant, matched-complexity controls); remaining systematic residuals; whether the variables or representation should
@@ -66,7 +68,7 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
 
 ### 4. Report and continue
 Send the user a short progress message: best eligible score and the attempt that produced it (with any reported-only
-failures), what changed, budget spent and left, the next plan. Then pause for review and guidance if the plan says so;
+failures), what changed, budget spent and left (compute, and tokens against the token budget), the next plan. Then pause for review and guidance if the plan says so;
 otherwise continue unless the stop rule fires, M or the budget is reached, or the next step needs approval. A stop
 request applies before any new submission; work already finished is kept and reported as such.
 

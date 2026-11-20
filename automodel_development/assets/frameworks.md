@@ -11,16 +11,25 @@ from exposed tool choices or a verified model list; CLI `--model` accepts names 
 - **Detached workers:** `claude -p "<prompt>" --model <model> --effort <low|medium|high|xhigh|max>` plus the approved
   permission flags in `AM_CLAUDE_FLAGS` (e.g. `--permission-mode acceptEdits` with `--allowedTools` for the commands
   the harness needs; `bypassPermissions` only if the user explicitly approves it). A `-p` session ends with its turn:
-  a worker waits in the foreground and leaves no background job behind.
-- **Waiting:** a foreground command blocks for at most 10 min, so a worker's long wait is a harness command that
-  blocks ≤ ~9.5 min and reports the job's state, repeated. In the interactive session, a background command that
+  a worker waits in the foreground and leaves no background job behind. By default a session also loads the user's
+  personal instruction file, every instruction file in the directories above it, auto-memory, user plugins, skills
+  and MCP listings, which can double a worker's fixed context and bring in unrelated rules. The launcher isolates
+  workers (`--disable-slash-commands --strict-mcp-config --setting-sources project,local` and a `--settings` object
+  with `claudeMdExcludes` for those files and `autoMemoryEnabled: false`); `--bare` would do more but accepts only
+  API-key authentication, not subscription logins. On a machine where the session runs inside a scheduler job, the
+  launcher's process checks (`worker_status.sh`) must run on that node, e.g. through the scheduler's step-attach
+  command; from elsewhere the launcher looks dead.
+- **Waiting:** prefer phase sessions (`resources.md` §2), which end the session at a job boundary. Otherwise a
+  foreground command blocks for at most 10 min, so a worker's long wait is a harness command that blocks ≈ 9.5 min
+  (with the tool timeout at the maximum) and reports the job's state, repeated. In the interactive session, a background command that
   returns when work is done (e.g. `worker_status.sh meta_m --wait <s>`) wakes the meta-agent with its completion
   notice. Cache expiry can make longer gaps costlier; compare total cost.
 - **Usage:** completion notices give per-agent tokens and duration; `usage_report.py claude` reads the session logs
   (`~/.claude/projects/`). Local transcripts expire after some weeks: keep prompts and returns in the project. The
   allowance reading (`/usage`) comes from the user.
 - **Known behaviour:** writes of report-like files by sub-agents are sometimes refused; have them return the text and
-  save it yourself. A usage-limit stop ends all running in-session sub-agents at once.
+  save it yourself. A usage-limit stop ends all running in-session sub-agents at once; detached workers stop with a
+  "hit your … limit" (rate_limit, HTTP 429) error, which the launcher waits through.
 
 ## Codex (CLI checked on 0.167.0; tools vary by session)
 - **In-session:** use exposed agent tools and limits. Full-history forks may require inherited model/effort; supply

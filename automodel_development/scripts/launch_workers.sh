@@ -15,6 +15,16 @@
 #                    failures and no job remains pending; otherwise non-zero for recovery. Prose is not evidence.
 # Optional: after_agent.sh <agent_dir> (e.g. a refit of the agent's best attempt for the review); hooks submit work only
 #   through the harness, which applies the same budget and STOP checks.
+#   job_state.sh <attempt_dir>  (phase sessions) exit 0 = the attempt has jobs running, 1 = jobs finished but not yet
+#                    collected, anything else = none pending. With it, workers end their session after submitting work
+#                    (leaving <attempt_dir>/STATE.md) instead of waiting in-session; the launcher polls the hook (no model
+#                    calls) and starts a fresh resume session when the jobs finish. Phase resumptions spend no retry.
+#   WORKER_RULES.md  (cli=claude) appended to the workers' system prompt.
+# Isolation (cli=claude, AM_ISOLATE=1 default): workers do not load instruction files above the project root, the user's
+#   personal instruction file, auto-memory, user settings/plugins, skills or MCP servers; the project's own instruction
+#   file is kept unless AM_WORKER_PROJECT_MD=0. Login is unaffected.
+# Usage/rate limits: a session that stops on one spends no retry; the agent waits AM_LIMIT_WAIT s and tries again, for up
+#   to AM_LIMIT_MAX_H hours in total, so a run resumes by itself after the limit window resets.
 # Ownership: an atomic lock directory <meta_dir>/.lock (launcher PID, one process group per agent). Workers run in their
 #   own process groups; on TERM/INT the launcher stops those groups and releases the lock only once none survives
 #   (otherwise the lock stays and failed.log says so). Scheduler jobs are not cancelled by this: harvest or cancel them
@@ -22,12 +32,16 @@
 # Permissions (explicit, approved by the user):
 #   AM_CLAUDE_FLAGS  required for cli=claude, e.g. "--permission-mode acceptEdits --allowedTools Bash(python3:*)"
 #   AM_CODEX_FLAGS   default "-s workspace-write": no network, background jobs die with their command; widen as approved
-# Other environment: AM_ATTEMPTS (5), AM_RETRY_WAIT (s, 1800), AM_MAX_TRIES (8), AM_STAGGER (s between agents, 20).
+# Other environment: AM_ATTEMPTS (5), AM_RETRY_WAIT (s, 1800), AM_MAX_TRIES (8), AM_STAGGER (s between agents, 20),
+#   AM_LIMIT_WAIT (s, 1200), AM_LIMIT_MAX_H (192), AM_JOB_POLL (s, 120), AM_JOB_WAIT_MAX_H (72), AM_MAX_PHASES (20 per
+#   attempt), AM_ISOLATE (1), AM_WORKER_PROJECT_MD (1).
 # Exit status: 0 all agents finished, 1 failures (see failed.log), 3 stopped by STOP.
 set -u
 META=${1:?usage: launch_workers.sh <meta_dir> [agents...]}; shift
 META=${META%/}
 ROOT=$PWD; RETRY_WAIT=${AM_RETRY_WAIT:-1800}; MAX_TRIES=${AM_MAX_TRIES:-8}; STAGGER=${AM_STAGGER:-20}
+LIMIT_WAIT=${AM_LIMIT_WAIT:-1200}; LIMIT_MAX=$(( ${AM_LIMIT_MAX_H:-192} * 3600 ))
+JOB_POLL=${AM_JOB_POLL:-120}; JOB_MAX=$(( ${AM_JOB_WAIT_MAX_H:-72} * 3600 )); MAX_PHASES=${AM_MAX_PHASES:-20}
 MANIFEST=$META/launch_manifest.jsonl
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 LOCK=$META/.lock
@@ -58,6 +72,23 @@ for s in $AGENTS; do
         *) echo "agent $s: unknown cli '${CLI[$s]}'" >&2; exit 1 ;;
     esac
 done
+
+MABS=$(cd "$META" && pwd)
+JOBHOOK=""; [ -x "$META/job_state.sh" ] && JOBHOOK=$MABS/job_state.sh
+ISO=()
+if [ "${AM_ISOLATE:-1}" = 1 ]; then   # claude workers: no unrelated instruction files, memory, plugins, skills or MCP
+    ex=(); d=$(dirname "$ROOT")
+    while :; do
+        for n in CLAUDE.md CLAUDE.local.md AGENTS.md; do [ -e "$d/$n" ] && ex+=("$d/$n"); done
+        [ "$d" = / ] && break; d=$(dirname "$d")
+    done
+    ex+=("${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md")
+    [ "${AM_WORKER_PROJECT_MD:-1}" = 1 ] || ex+=("$ROOT/CLAUDE.md" "$ROOT/CLAUDE.local.md" "$ROOT/AGENTS.md")
+    js=$(printf '"%s",' "${ex[@]}")
+    ISO=(--disable-slash-commands --strict-mcp-config --setting-sources project,local
+         --settings "{\"claudeMdExcludes\":[${js%,}],\"autoMemoryEnabled\":false}")
+    [ -f "$META/WORKER_RULES.md" ] && ISO+=(--append-system-prompt-file "$MABS/WORKER_RULES.md")
+fi
 
 if ! mkdir "$LOCK" 2>/dev/null; then
     if alive "$(cat "$LOCK/launcher" 2>/dev/null)"; then echo "a launcher for $META is already running (pid $(cat "$LOCK/launcher"))" >&2
@@ -99,7 +130,7 @@ run_session() {  # agent, label, prompt
         codex) codex exec -m "${MODEL[$s]}" ${EFFORT[$s]:+-c "model_reasoning_effort=\"${EFFORT[$s]}\""} \
                    ${AM_CODEX_FLAGS:--s workspace-write} --skip-git-repo-check -C "$ROOT" -o "$d/.reply_$lab.md" "$p" \
                    < /dev/null >> "$d/session_$lab.log" 2>&1 ;;
-        claude) claude -p "$p" --model "${MODEL[$s]}" ${EFFORT[$s]:+--effort "${EFFORT[$s]}"} $AM_CLAUDE_FLAGS \
+        claude) claude -p "$p" --model "${MODEL[$s]}" ${EFFORT[$s]:+--effort "${EFFORT[$s]}"} $AM_CLAUDE_FLAGS "${ISO[@]}" \
                    < /dev/null > "$d/.reply_$lab.md" 2>> "$d/session_$lab.log" ;;
     esac
     rc=$?
@@ -110,20 +141,44 @@ run_session() {  # agent, label, prompt
     return $rc
 }
 
-session_until() {  # agent, label, done-test, prompt: retry until the test passes; 0 done, 1 failed, 3 stopped
-    local s=$1 lab=$2 test=$3 p=$4 t rc t0 off lf
-    for t in $(seq 1 "$MAX_TRIES"); do
+limit_hit() {  # agent, label, log offset, rc: did this session stop on a usage or rate limit?
+    local out
+    out=$(tail -c +$(( $3 + 1 )) "$META/agent_$1/session_$2.log" 2>/dev/null | head -c 20000
+          cat "$META/agent_$1/.reply_$2.md" 2>/dev/null | head -c 20000)
+    echo "$out" | grep -qiE "hit your [a-z0-9 -]{0,20}limit" && return 0
+    [ "$4" -ne 0 ] && echo "$out" | grep -qiE "usage limit|rate_limit|rate limit|HTTP 429" && return 0
+    return 1
+}
+
+session_until() {  # agent, label, done-test, prompt[, resume prompt, attempt dir]: 0 done, 1 failed, 3 stopped
+    local s=$1 lab=$2 test=$3 p=$4 rp=${5:-} a=${6:-} t=1 rc t0 off lf waited=0 phases=0 jw st q
+    while [ "$t" -le "$MAX_TRIES" ]; do
         eval "$test" && return 0
         [ -f "$META/STOP" ] && { log "$s" "$lab not started: STOP"; return 3; }
         lf=$META/agent_$s/session_$lab.log; off=$(stat -c %s "$lf" 2>/dev/null || echo 0); t0=$(date +%s)
-        run_session "$s" "$lab" "$p"; rc=$?
+        q=$p; [ -n "$rp" ] && [ -f "$a/STATE.md" ] && q=$rp
+        run_session "$s" "$lab" "$q"; rc=$?
         eval "$test" && return 0
+        if limit_hit "$s" "$lab" "$off" "$rc" && [ "$waited" -lt "$LIMIT_MAX" ]; then          # no retry spent
+            log "$s" "$lab stopped by a usage/rate limit; waiting ${LIMIT_WAIT}s"
+            sleep "$LIMIT_WAIT"; waited=$(( waited + LIMIT_WAIT )); continue
+        fi
+        if [ -n "$JOBHOOK" ] && [ -n "$a" ] && [ "$phases" -lt "$MAX_PHASES" ]; then          # phase boundary?
+            jw=0; "$JOBHOOK" "$a" >/dev/null 2>&1; st=$?
+            [ "$st" -eq 0 ] && log "$s" "$lab waiting for jobs of $a"
+            while [ "$st" -eq 0 ] && [ "$jw" -lt "$JOB_MAX" ]; do
+                [ -f "$META/STOP" ] && { log "$s" "$lab: STOP while jobs run; not resuming"; return 3; }
+                sleep "$JOB_POLL"; jw=$(( jw + JOB_POLL )); "$JOBHOOK" "$a" >/dev/null 2>&1; st=$?
+            done
+            if [ "$st" -eq 1 ]; then phases=$(( phases + 1 )); log "$s" "$lab resumes after jobs (phase $phases)"; continue; fi
+        fi
         # a quick failure whose own output names a bad model or flag will not fix itself; anything else is retried
         if [ $rc -ne 0 ] && [ $(( $(date +%s) - t0 )) -lt 120 ] && tail -c +$((off + 1)) "$lf" 2>/dev/null | head -n 40 |
            grep -qiE "model.{0,40}(not found|does not exist|not supported|unknown|invalid)|unknown (option|argument|flag)|unexpected argument"; then
             fail "$s" "$lab: configuration error (exit $rc); see $META/agent_$s/session_$lab.log"; return 1
         fi
         [ "$t" -lt "$MAX_TRIES" ] && sleep "$RETRY_WAIT"
+        t=$(( t + 1 ))
     done
     fail "$s" "$lab not complete after $MAX_TRIES sessions"
 }
@@ -133,13 +188,20 @@ agent_loop() {
     mkdir -p "$d"
     for i in $(seq 1 "$n"); do
         a=$d/attempt_$i
-        session_until "$s" "a$i" "'$META/done_attempt.sh' '$a'" "You are agent $s of meta-iteration $META of an automodel search; \
-project directory $ROOT. Read $META/COMMON_PROMPT.md and $d/DIRECTION.md, then $d/notes.md and the earlier records it points to, and the other agents' $META/agent_*/exchange.md. Complete attempt $i in $a, including assigned variants and controls in their declared paths; \
-start no later numbered attempt. Count every fit against the stated budget. If $a/.job exists, an evaluation is already running or finished: \
+        fin="Count every fit against the stated budget. If $a/.job exists, an evaluation is already running or finished: \
 harvest it as COMMON_PROMPT.md describes and never resubmit it. If $META/STOP appears, submit nothing new. Finish only \
 when $a holds a complete result (the harness's validator passes), no job of yours is pending, $d/notes.md is updated \
 (<= 300 words: current best, what worked, queue of next hypotheses) and $d/exchange.md lists any component worth \
 sharing (file, parameter map, effect). Final reply: at most five lines."
+        ph=""; [ -n "$JOBHOOK" ] && ph=" Do not wait for cluster jobs in this session: once you have submitted work and \
+nothing else useful remains until it finishes, write $a/STATE.md (<= 150 words: what is pending, how to collect it, what \
+to do next) and end the session; a fresh session continues when the jobs finish."
+        session_until "$s" "a$i" "'$META/done_attempt.sh' '$a'" "You are agent $s of meta-iteration $META of an automodel search; \
+project directory $ROOT. Read $META/COMMON_PROMPT.md and $d/DIRECTION.md, then $d/notes.md and the earlier records it points to, and the other agents' $META/agent_*/exchange.md. Complete attempt $i in $a, including assigned variants and controls in their declared paths; \
+start no later numbered attempt. $fin$ph" "You are agent $s of meta-iteration $META of an automodel search; project \
+directory $ROOT. Resume attempt $i in $a: read $META/COMMON_PROMPT.md, $d/DIRECTION.md and $a/STATE.md (left by your \
+previous session; it is your memory), collect the finished jobs, then continue from there. Start no later numbered \
+attempt. $fin$ph" "$a"
         rc=$?; [ $rc -ne 0 ] && return $rc
     done
     session_until "$s" summary "[ -s '$d/summary.md' ] && [ -f '$d/.summary.done' ]" "You are agent $s of meta-iteration $META of an automodel search; \
@@ -159,8 +221,8 @@ $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.m
 echo "$(date '+%F %T') launching agents: $AGENTS"
 rm -f "$META/failed.log"
 set +m
-BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES MANIFEST CLI MODEL EFFORT NATT)
-$(declare -f log manifest fail run_session session_until agent_loop)"
+BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO MANIFEST CLI MODEL EFFORT NATT)
+$(declare -f log manifest fail run_session limit_hit session_until agent_loop)"
 for s in $AGENTS; do
     setsid bash -c "$BOOT"$'\n''agent_loop "$1"' automodel-worker "$s" &
     PIDS="$PIDS $!"; echo "$!" >> "$LOCK/groups"; sleep "$STAGGER"

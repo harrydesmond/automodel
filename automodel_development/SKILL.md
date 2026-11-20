@@ -44,7 +44,8 @@ sub-agents.
 - `assets/RUN_PLAN.md`: plan template. `assets/checks.md`: required evaluator checks and a menu of conditional ones.
 - `assets/resources.md`: search size (light or heavy), orchestration, waiting, models, budgets, usage accounting, re-planning.
 - `assets/frameworks.md`: Claude Code and Codex mechanics (sub-agents, detached workers, waits, permissions, usage).
-- `<skill>/scripts/`: `launch_workers.sh` and `worker_status.sh` (detached workers, run from the project root),
+- `<skill>/scripts/`: `launch_workers.sh` (detached workers, run from the project root: phase sessions at job
+  boundaries, usage-limit waits, isolated Claude workers) and `worker_status.sh`,
   `usage_report.py` (token usage from local session logs), `tests/run_tests.sh` (their fixture tests).
 - `TIPS.md`: optional practices (uncertainty, reference models).
 - References: the user may put papers, code or earlier results in the project's `references/` folder (never in this

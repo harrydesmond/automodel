@@ -25,7 +25,10 @@ session per meta-iteration and fresh agents for the next one, briefed by the rev
 supervise attempts:
 1. Write `meta_m/COMMON_PROMPT.md` (harness, decision rule, budget, how to wait, what an attempt leaves on disk,
    the `summary.md` specification, scope limits), `meta_m/agent_s/DIRECTION.md`, `meta_m/agents.conf` and the
-   harness's validator `meta_m/done_attempt.sh` (formats in the header of `<skill>/scripts/launch_workers.sh`).
+   harness's validator `meta_m/done_attempt.sh` (formats in the header of `<skill>/scripts/launch_workers.sh`). When
+   evaluations run as scheduler jobs, also write `meta_m/job_state.sh` (from the harness: running / finished but not
+   collected / none, per attempt) so sessions end at job boundaries (phase sessions, below); optionally
+   `meta_m/WORKER_RULES.md`, the few standing rules workers need that are not in COMMON_PROMPT.md.
 2. Use the plan's approved worker permissions: write roots, network and compute access, the least the runtime
    supports. Needing the network is not a reason to drop every boundary. The launcher needs bash ≥ 4, `pgrep` and
    `setsid` (Linux; on macOS install a newer bash). If the approved configuration is unavailable, run in-session or
@@ -33,7 +36,14 @@ supervise attempts:
 3. From a session whose processes may outlive their command (`frameworks.md`), use a validated project launcher with
    this contract, or launch `setsid nohup <skill>/scripts/launch_workers.sh meta_m > meta_m/launch.log 2>&1 < /dev/null &`. Each attempt
    is a fresh non-interactive session; memory between attempts is the agent's `notes.md` (≤ 300 words) and
-   `exchange.md` lists components others may import. The launcher takes exclusive ownership (`meta_m/.lock`) before
+   `exchange.md` lists components others may import. With `job_state.sh`, an attempt is split into phase sessions:
+   the worker submits work, writes `attempt_i/STATE.md` (≤ 150 words: pending work, how to collect it, next steps) and
+   ends its session; the launcher polls the hook without model calls and starts a short resume session when the jobs
+   finish. This removes in-session polling and resets the context at each job boundary, which in long attempts is the
+   largest share of input. Phase resumptions, and sessions stopped by a usage or rate limit, spend no retry (the
+   launcher waits through limit windows). Claude workers run isolated by default: no instruction files above the
+   project root, no personal instruction file or auto-memory, no user plugins, skills or MCP servers; context that
+   workers need goes into COMMON_PROMPT.md or WORKER_RULES.md. The launcher takes exclusive ownership (`meta_m/.lock`) before
    starting workers, retries incomplete sessions a bounded number of times, and starts no new session or hook once
    `meta_m/STOP` exists. On interruption it stops its recorded worker process groups and keeps the lock if it cannot
    confirm they are gone; after a crash, `launch_workers.sh --reclaim meta_m` releases it only when the registered
@@ -44,13 +54,21 @@ supervise attempts:
    on launcher exit, failure or timeout. Review when all agents finish.
 
 ## 3. Waiting and context rules (for prompts and COMMON_PROMPT.md)
-Input ≈ model calls × context per call. Price uncached input, cache writes/reads and output separately; gross tokens
-alone do not measure cost.
-- Avoid repeated model calls merely to poll. Prefer completion notifications; otherwise match waits to expected
-  remaining time, acceptable detection delay and session limits, then check once. This includes screens and checks;
-  a shell watcher may poll internally without waking the model.
-- Long outputs go to files; print tails (≤ ~40 lines). The harness's record and card replace hand-written tables.
-  Keep prose short: plan ≤ 150 words, rationale ≤ 200, `summary.md` ≤ 800, final reply a few lines.
+Input ≈ model calls × context per call, and every call re-reads the whole context, so long sessions dominate: the
+number of calls and the size the context grows to matter more than any single output. Price uncached input, cache
+writes/reads and output separately; gross tokens alone do not measure cost.
+- Do not poll from a model session. Prefer phase sessions (§2); otherwise completion notifications; otherwise a
+  harness wait command used close to the longest single blocking call the framework allows (`frameworks.md`), then
+  check once. A shell watcher may poll internally without waking the model.
+- Keep the context small: do analysis in short script files that print compact summaries (several questions per run)
+  rather than many exploratory one-line commands; never print large files or full arrays; create and modify large
+  candidate files with generator scripts or targeted edits, not by rewriting them in the conversation; read others'
+  files through their summaries and exchange notes. Give each attempt a soft guide for model calls (from the token
+  budget, §5) and end a phase rather than letting a session grow.
+- Long outputs go to files; print tails (≤ ~40 lines). The harness's record and card replace hand-written tables; the
+  card should carry the diagnostics agents need most (e.g. error breakdowns by the main data dimensions), so agents
+  do not each re-derive them. Keep prose short: plan ≤ 150 words, rationale ≤ 200, `summary.md` ≤ 800, final reply a
+  few lines.
 - Stay within the direction and the budget; no unplanned side audits or score-only reruns. If reproduction, provenance or
   scoring contradicts the plan, stop the affected comparison, send one short blocker with the evidence, and run only
   the smallest diagnostic needed.
@@ -72,9 +90,14 @@ models (`frameworks.md`), not tiers. None of these allocations has been compared
   evaluation + time to notice) + review. Compute ≈ evaluations × cost. Parallelism (agents, or variants per attempt
   evaluated together) buys progress per hour with usage and compute; sequence costs wall time.
 - Do not convert tokens into a share of an allowance or into money without the user's reading or prices.
-- Measure total worker, supervisor, summary and review usage on this workload. Fresh attempt sessions can reduce
-  repeated context, but setup and hand-over costs can offset the saving; compare validated results within the same
-  total budget.
+- **Token budget: a guide, not a limit.** Plan one per meta-iteration (S × I × tokens per attempt, with tokens per
+  attempt ≈ model calls × median context; take both from the previous meta-iteration's usage log, or a rough guess
+  for the first, and say which). Give agents the corresponding soft guide (calls per attempt, how often to end a
+  phase) in COMMON_PROMPT.md. Do not spend significant effort pinning the estimate down, and never stop, cancel or
+  disrupt agents for exceeding it: token use is hard to predict. Report planned against actual after every
+  meta-iteration (§6) and use the difference to re-plan S, I, models, effort and the context rules (§7).
+- Measure total worker, supervisor, summary and review usage on this workload. Fresh attempt and phase sessions
+  reduce repeated context; their start-up and hand-over cost is small by comparison but not zero.
 
 ## 6. Usage log (heavy)
 `launch_workers.sh` writes `meta_m/launch_manifest.jsonl` (agent, session label, model, effort, start/end). At each
@@ -82,10 +105,11 @@ review run `python3 <skill>/scripts/usage_report.py <claude|codex> --cwd <projec
 `meta_m/usage_log.jsonl` (times in UTC, e.g. the first `time` in `launch_manifest.jsonl`): it counts usage events inside the window (a meta-agent session that began earlier is
 included for its in-window calls only), separates uncached input, cache reads/writes and output, and tags workers by
 their launch prompt. "Input after waits" is a heuristic. Add per agent: proposals, screens, scored fits, attempts validated and quarantined, gain over its seed, wall time. Summary line in `CONTEXT.md`; mark allowance readings unknown unless the user
-supplies them.
+supplies them. In the progress message after each meta-iteration, report the token budget against actual use (total
+and per agent; calls and median context as the drivers) and what the next meta-iteration will change because of it.
 
 ## 7. Re-plan at every boundary
-Re-choose directions, S, I and allocations from the last meta-iteration. Retire a direction when the evidence says its
+Re-choose directions, S, I, allocations and the token budget from the last meta-iteration. Retire a direction when the evidence says its
 premise is wrong or another component limits it, not merely because one round gained nothing; keep a bounded share
 for distinct untested hypotheses, and record why each direction continues, merges or stops. Diagnose wasted fits before
 changing screening instructions or agent-model allocation. Review persistent gate failures; propose continued work, a changed
