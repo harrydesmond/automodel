@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Fake `claude -p` for launcher tests. FAKE_MODE: ok | limit (first $FAKE_LIMITS calls hit a usage limit) | phased
-# (an attempt's first session "submits a job": STATE.md + a running countdown read by the test's job_state.sh hook).
+# (an attempt's first session "submits a job": STATE.md + a running countdown read by the test's job_state.sh hook)
+# | stuck (every session ends without collecting its finished jobs).
 # FAKE_ARGS: file receiving the arguments of the last call; FAKE_PROMPTS: file receiving one line per call.
 p=$2
 [ -n "${FAKE_ARGS:-}" ] && printf '%s\n' "$@" > "$FAKE_ARGS"
@@ -12,6 +13,7 @@ fi
 a=$(echo "$p" | grep -oE 'in [^ ,]+/attempt_[0-9]+' | head -1 | cut -c4-)
 if [ -n "$a" ]; then
   mkdir -p "$a"
+  [ "${FAKE_MODE:-ok}" = stuck ] && { echo "collection failed" > "$a/STATE.md"; echo stuck; exit 0; }
   if [ "${FAKE_MODE:-ok}" = phased ] && [ ! -f "$a/STATE.md" ]; then echo "job submitted" > "$a/STATE.md"; echo 2 > "$a/.running"; echo submitted; exit 0; fi
   echo '{"status":"ok"}' > "$a/result.json"
 else

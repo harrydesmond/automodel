@@ -102,6 +102,9 @@ csetup; printf '#!/bin/sh\nf="$1/.running"; [ -f "$f" ] || exit 2\nn=$(cat "$f")
 rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_JOB_POLL=0 AM_MAX_TRIES=1 run 1)
 check "phase sessions: end at a job, resume when it finishes, no retry spent" '[ "$rc" = 0 ] && [ -f meta_1/agent_1/attempt_1/result.json ] && grep -q "resumes after jobs" meta_1/agent_1/sessions.log'
 check "phase sessions: the resume session gets the resume prompt and the hand-off rule" 'grep -q "Resume attempt 1" "$T/prompts" && grep -q "end the session" "$T/prompts"'
+csetup; printf '#!/bin/sh\nexit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
+rc=$(FAKE_MODE=stuck AM_JOB_POLL=0 AM_RETRY_WAIT=0 AM_MAX_TRIES=2 run 1)
+check "phase sessions: repeatedly uncollected results spend retries, not free phases" '[ "$rc" = 1 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 3 ]'
 csetup; rc=$(FAKE_ARGS=$T/args run 1)
 check "isolation: claude workers exclude outside instruction files, memory, skills and MCP" '[ "$rc" = 0 ] && grep -q -- "--disable-slash-commands" "$T/args" && grep -q "claudeMdExcludes" "$T/args" && grep -q "autoMemoryEnabled" "$T/args"'
 csetup; rc=$(FAKE_ARGS=$T/args AM_ISOLATE=0 run 1)

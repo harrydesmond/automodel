@@ -18,7 +18,8 @@
 #   job_state.sh <attempt_dir>  (phase sessions) exit 0 = the attempt has jobs running, 1 = jobs finished but not yet
 #                    collected, anything else = none pending. With it, workers end their session after submitting work
 #                    (leaving <attempt_dir>/STATE.md) instead of waiting in-session; the launcher polls the hook (no model
-#                    calls) and starts a fresh resume session when the jobs finish. Phase resumptions spend no retry.
+#                    calls) and starts a fresh resume session when the jobs finish. Phase resumptions spend no retry,
+#                    except a session that again ends with finished jobs uncollected (e.g. collection keeps failing).
 #   WORKER_RULES.md  (cli=claude) appended to the workers' system prompt.
 # Isolation (cli=claude, AM_ISOLATE=1 default): workers do not load instruction files above the project root, the user's
 #   personal instruction file, auto-memory, user settings/plugins, skills or MCP servers; the project's own instruction
@@ -151,7 +152,7 @@ limit_hit() {  # agent, label, log offset, rc: did this session stop on a usage 
 }
 
 session_until() {  # agent, label, done-test, prompt[, resume prompt, attempt dir]: 0 done, 1 failed, 3 stopped
-    local s=$1 lab=$2 test=$3 p=$4 rp=${5:-} a=${6:-} t=1 rc t0 off lf waited=0 phases=0 jw st q
+    local s=$1 lab=$2 test=$3 p=$4 rp=${5:-} a=${6:-} t=1 rc t0 off lf waited=0 phases=0 jw st q unc=0
     while [ "$t" -le "$MAX_TRIES" ]; do
         eval "$test" && return 0
         [ -f "$META/STOP" ] && { log "$s" "$lab not started: STOP"; return 3; }
@@ -170,7 +171,11 @@ session_until() {  # agent, label, done-test, prompt[, resume prompt, attempt di
                 [ -f "$META/STOP" ] && { log "$s" "$lab: STOP while jobs run; not resuming"; return 3; }
                 sleep "$JOB_POLL"; jw=$(( jw + JOB_POLL )); "$JOBHOOK" "$a" >/dev/null 2>&1; st=$?
             done
-            if [ "$st" -eq 1 ]; then phases=$(( phases + 1 )); log "$s" "$lab resumes after jobs (phase $phases)"; continue; fi
+            if [ "$st" -eq 1 ] && [ "$jw" -eq 0 ]; then unc=$(( unc + 1 )); else unc=0; fi   # ended with results uncollected
+            if [ "$st" -eq 1 ] && [ "$unc" -le 1 ]; then
+                phases=$(( phases + 1 )); log "$s" "$lab resumes after jobs (phase $phases)"; continue
+            fi
+            [ "$st" -eq 1 ] && log "$s" "$lab ended again with finished jobs uncollected: counts as a retry"
         fi
         # a quick failure whose own output names a bad model or flag will not fix itself; anything else is retried
         if [ $rc -ne 0 ] && [ $(( $(date +%s) - t0 )) -lt 120 ] && tail -c +$((off + 1)) "$lf" 2>/dev/null | head -n 40 |
