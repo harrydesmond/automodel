@@ -41,9 +41,10 @@ supervise attempts:
    ends its session; the launcher polls the hook without model calls and starts a short resume session when the jobs
    finish. This removes in-session polling and resets the context at each job boundary, which in long attempts is the
    largest share of input. Phase resumptions, and sessions stopped by a usage or rate limit, spend no retry (the
-   launcher waits through limit windows). Claude workers run isolated by default: no instruction files above the
-   project root, no personal instruction file or auto-memory, no user plugins, skills or MCP servers; context that
-   workers need goes into COMMON_PROMPT.md or WORKER_RULES.md. The launcher takes exclusive ownership (`meta_m/.lock`) before
+   launcher waits through limit windows). Workers run isolated by default: no instruction files (the project's own
+   included), personal instructions, memory, user plugins, skills or MCP servers (details per CLI and the remaining
+   gaps in `frameworks.md`); context that workers need goes into COMMON_PROMPT.md or WORKER_RULES.md. The launcher
+   can also run on the cluster itself (`frameworks.md`). The launcher takes exclusive ownership (`meta_m/.lock`) before
    starting workers, retries incomplete sessions a bounded number of times, and starts no new session or hook once
    `meta_m/STOP` exists. On interruption it stops its recorded worker process groups and keeps the lock if it cannot
    confirm they are gone; after a crash, `launch_workers.sh --reclaim meta_m` releases it only when the registered
@@ -101,8 +102,8 @@ models (`frameworks.md`), not tiers. None of these allocations has been compared
 
 ## 6. Usage log (heavy)
 `launch_workers.sh` writes `meta_m/launch_manifest.jsonl` (agent, session label, model, effort, start/end). At each
-review run `python3 <skill>/scripts/usage_report.py <claude|codex> --cwd <project> --since <launch> --until <now>` into
-`meta_m/usage_log.jsonl` (times in UTC, e.g. the first `time` in `launch_manifest.jsonl`): it counts usage events inside the window (a meta-agent session that began earlier is
+review run `python3 <skill>/scripts/usage_report.py <claude|codex> --cwd <project> --since <launch> --until <now>` (plus
+`--home <dir>` when workers use a separate agent home) into `meta_m/usage_log.jsonl` (times in UTC, e.g. the first `time` in `launch_manifest.jsonl`): it counts usage events inside the window (a meta-agent session that began earlier is
 included for its in-window calls only), separates uncached input, cache reads/writes and output, and tags workers by
 their launch prompt. "Input after waits" is a heuristic. Add per agent: proposals, screens, scored fits, attempts validated and quarantined, gain over its seed, wall time. Summary line in `CONTEXT.md`; mark allowance readings unknown unless the user
 supplies them. In the progress message after each meta-iteration, report the token budget against actual use (total

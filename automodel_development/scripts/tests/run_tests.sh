@@ -86,6 +86,10 @@ cd "$P"; out=$(python3 "$S/usage_report.py" claude --since 2026-01-01T10:00 --un
 check "usage (claude): worker tag" 'echo "$out" | grep -q "\"role\": \"worker\".*\"agent\": 2"'
 check "usage (claude): window, duplicate message counted once, sub-agent" 'echo "$out" | tail -1 | grep -q "\"calls\": 2, \"input\": 150"'
 check "usage: malformed or reversed bounds are errors" '! python3 "$S/usage_report.py" claude --since 2026-13-45 >/dev/null 2>&1 && ! python3 "$S/usage_report.py" claude --since 2026-01-02 --until 2026-01-01 >/dev/null 2>&1'
+cp -r "$HOME/.claude" "$T/alt_claude"; cp -r "$HOME/.codex" "$T/alt_codex"; mkdir -p "$T/empty"
+cd "$P"; out=$(HOME=$T/empty CLAUDE_CONFIG_DIR=$T/alt_claude python3 "$S/usage_report.py" claude --since 2026-01-01T10:00 --until 2026-01-01T12:00)
+out2=$(HOME=$T/empty python3 "$S/usage_report.py" codex --home "$T/alt_codex" --cwd . --since 2026-01-01T10:00 --until 2026-01-01T12:00)
+check "usage: separate homes from the environment or --home" 'echo "$out" | tail -1 | grep -q "\"calls\": 2, \"input\": 150" && echo "$out2" | tail -1 | grep -q "\"calls\": 1, \"input\": 200"'
 mf=$HOME/.codex/sessions/2026/01/01/rollout-2026-01-01T09-00-00-m.jsonl
 { printf '{"timestamp":"2026-01-01T09:00:00Z","type":"session_meta","payload":{"id":"s3","cwd":"%s"}}\n' "$P"
   printf '{"timestamp":"2026-01-01T10:00:00Z","type":"turn_context","payload":{"model":"A","effort":"low"}}\n'; tc 2026-01-01T10:30:00Z 5 10 0
@@ -105,9 +109,20 @@ check "phase sessions: the resume session gets the resume prompt and the hand-of
 csetup; printf '#!/bin/sh\nexit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
 rc=$(FAKE_MODE=stuck AM_JOB_POLL=0 AM_RETRY_WAIT=0 AM_MAX_TRIES=2 run 1)
 check "phase sessions: repeatedly uncollected results spend retries, not free phases" '[ "$rc" = 1 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 3 ]'
-csetup; rc=$(FAKE_ARGS=$T/args run 1)
+csetup; rc=$(FAKE_ARGS=$T/args run 1); cp "$T/args" "$T/args.iso"
 check "isolation: claude workers exclude outside instruction files, memory, skills and MCP" '[ "$rc" = 0 ] && grep -q -- "--disable-slash-commands" "$T/args" && grep -q "claudeMdExcludes" "$T/args" && grep -q "autoMemoryEnabled" "$T/args"'
 csetup; rc=$(FAKE_ARGS=$T/args AM_ISOLATE=0 run 1)
 check "isolation can be switched off" '[ "$rc" = 0 ] && ! grep -q "claudeMdExcludes" "$T/args"'
+check "isolation: the project's own instruction files are excluded at any depth by default" 'grep -q "$T/p/\*\*/CLAUDE.md" "$T/args.iso"'
+csetup; rc=$(FAKE_ARGS=$T/args AM_WORKER_PROJECT_MD=1 run 1)
+check "isolation: AM_WORKER_PROJECT_MD=1 keeps them" '[ "$rc" = 0 ] && grep -q claudeMdExcludes "$T/args" && ! grep -q "$T/p/\*\*/CLAUDE.md" "$T/args"'
+csetup; echo rule > meta_1/WORKER_RULES.md; rc=$(FAKE_ARGS=$T/args AM_ISOLATE=0 run 1)
+check "worker rules reach claude workers also without isolation" '[ "$rc" = 0 ] && grep -q -- "--append-system-prompt-file" "$T/args"'
+setup; printf '1 codex m low 1' > meta_1/agents.conf; printf 'say "hi"\n\tuse C:\\x\n' > meta_1/WORKER_RULES.md
+rc=$(FAKE_ARGS=$T/args run 1)
+check "isolation (codex): no user config or memories, project root = launch dir, no project instruction files" '[ "$rc" = 0 ] && grep -qx -- "--ignore-user-config" "$T/args" && grep -qx "memories" "$T/args" && grep -qx "project_root_markers=\[\]" "$T/args" && grep -qx "project_doc_max_bytes=0" "$T/args"'
+check "worker rules reach codex workers as an escaped TOML string" 'grep -qxF "developer_instructions=\"say \\\"hi\\\"\\n\\tuse C:\\\\x\"" "$T/args"'
+setup; printf '1 codex m low 1' > meta_1/agents.conf; rc=$(FAKE_ARGS=$T/args AM_ISOLATE=0 run 1)
+check "isolation (codex) can be switched off" '[ "$rc" = 0 ] && ! grep -q -- "--ignore-user-config" "$T/args"'
 unset AM_CLAUDE_FLAGS
 cd /; echo "passed $pass, failed $failn"; [ "$failn" -eq 0 ]

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Fake `codex exec` for launcher tests. Behaviour from $FAKE_MODE: ok | empty | badmodel | flaky | hang.
+# FAKE_ARGS: file receiving the arguments of the last call.
 p="${@: -1}"; reply=""; prev=""
+[ -n "${FAKE_ARGS:-}" ] && printf '%s\n' "$@" > "$FAKE_ARGS"
 for x in "$@"; do [ "$prev" = "-o" ] && reply=$x; prev=$x; done
 a=$(echo "$p" | grep -oE 'in [^ ,]+/attempt_[0-9]+' | head -1 | cut -c4-)
 case ${FAKE_MODE:-ok} in

@@ -20,10 +20,13 @@
 #                    (leaving <attempt_dir>/STATE.md) instead of waiting in-session; the launcher polls the hook (no model
 #                    calls) and starts a fresh resume session when the jobs finish. Phase resumptions spend no retry,
 #                    except a session that again ends with finished jobs uncollected (e.g. collection keeps failing).
-#   WORKER_RULES.md  (cli=claude) appended to the workers' system prompt.
-# Isolation (cli=claude, AM_ISOLATE=1 default): workers do not load instruction files above the project root, the user's
-#   personal instruction file, auto-memory, user settings/plugins, skills or MCP servers; the project's own instruction
-#   file is kept unless AM_WORKER_PROJECT_MD=0. Login is unaffected.
+#   WORKER_RULES.md  standing rules for workers: claude appends it to the system prompt, codex gets it as developer
+#                    instructions.
+# Isolation (AM_ISOLATE=1 default): workers get their context from the brief, not from instruction files: none above the
+#   project root, no personal one, and none of the project's own at any depth unless AM_WORKER_PROJECT_MD=1. Claude:
+#   also no auto-memory, user settings/plugins, skills or MCP servers. Codex: user config.toml (MCP servers, plugins,
+#   features) and memories off; its personal AGENTS.md and user skills live in CODEX_HOME, so point CODEX_HOME at a
+#   separate, logged-in home to drop them too. Login is unaffected.
 # Usage/rate limits: a session that stops on one spends no retry; the agent waits AM_LIMIT_WAIT s and tries again, for up
 #   to AM_LIMIT_MAX_H hours in total, so a run resumes by itself after the limit window resets.
 # Ownership: an atomic lock directory <meta_dir>/.lock (launcher PID, one process group per agent). Workers run in their
@@ -35,7 +38,7 @@
 #   AM_CODEX_FLAGS   default "-s workspace-write": no network, background jobs die with their command; widen as approved
 # Other environment: AM_ATTEMPTS (5), AM_RETRY_WAIT (s, 1800), AM_MAX_TRIES (8), AM_STAGGER (s between agents, 20),
 #   AM_LIMIT_WAIT (s, 1200), AM_LIMIT_MAX_H (192), AM_JOB_POLL (s, 120), AM_JOB_WAIT_MAX_H (72), AM_MAX_PHASES (20 per
-#   attempt), AM_ISOLATE (1), AM_WORKER_PROJECT_MD (1).
+#   attempt), AM_ISOLATE (1), AM_WORKER_PROJECT_MD (0).
 # Exit status: 0 all agents finished, 1 failures (see failed.log), 3 stopped by STOP.
 set -u
 META=${1:?usage: launch_workers.sh <meta_dir> [agents...]}; shift
@@ -76,19 +79,25 @@ done
 
 MABS=$(cd "$META" && pwd)
 JOBHOOK=""; [ -x "$META/job_state.sh" ] && JOBHOOK=$MABS/job_state.sh
-ISO=()
-if [ "${AM_ISOLATE:-1}" = 1 ]; then   # claude workers: no unrelated instruction files, memory, plugins, skills or MCP
+ISO=(); CISO=()
+if [ "${AM_ISOLATE:-1}" = 1 ]; then   # workers: no unrelated instruction files, memory, plugins, skills or MCP
     ex=(); d=$(dirname "$ROOT")
     while :; do
         for n in CLAUDE.md CLAUDE.local.md AGENTS.md; do [ -e "$d/$n" ] && ex+=("$d/$n"); done
         [ "$d" = / ] && break; d=$(dirname "$d")
     done
     ex+=("${CLAUDE_CONFIG_DIR:-$HOME/.claude}/CLAUDE.md")
-    [ "${AM_WORKER_PROJECT_MD:-1}" = 1 ] || ex+=("$ROOT/CLAUDE.md" "$ROOT/CLAUDE.local.md" "$ROOT/AGENTS.md")
+    [ "${AM_WORKER_PROJECT_MD:-0}" = 1 ] || ex+=("$ROOT/**/CLAUDE.md" "$ROOT/**/CLAUDE.local.md" "$ROOT/**/AGENTS.md")
     js=$(printf '"%s",' "${ex[@]}")
     ISO=(--disable-slash-commands --strict-mcp-config --setting-sources project,local
          --settings "{\"claudeMdExcludes\":[${js%,}],\"autoMemoryEnabled\":false}")
-    [ -f "$META/WORKER_RULES.md" ] && ISO+=(--append-system-prompt-file "$MABS/WORKER_RULES.md")
+    CISO=(--ignore-user-config --disable memories -c 'project_root_markers=[]')   # project root = $ROOT, not the git root
+    [ "${AM_WORKER_PROJECT_MD:-0}" = 1 ] || CISO+=(-c project_doc_max_bytes=0)
+fi
+if [ -f "$META/WORKER_RULES.md" ]; then
+    ISO+=(--append-system-prompt-file "$MABS/WORKER_RULES.md")
+    r=$(cat "$META/WORKER_RULES.md"); r=${r//$'\r'/}; r=${r//\\/\\\\}; r=${r//\"/\\\"}; r=${r//$'\t'/\\t}; r=${r//$'\n'/\\n}
+    CISO+=(-c "developer_instructions=\"$r\"")   # TOML basic string
 fi
 
 if ! mkdir "$LOCK" 2>/dev/null; then
@@ -129,7 +138,7 @@ run_session() {  # agent, label, prompt
     manifest "$s" "$lab" start
     case ${CLI[$s]} in
         codex) codex exec -m "${MODEL[$s]}" ${EFFORT[$s]:+-c "model_reasoning_effort=\"${EFFORT[$s]}\""} \
-                   ${AM_CODEX_FLAGS:--s workspace-write} --skip-git-repo-check -C "$ROOT" -o "$d/.reply_$lab.md" "$p" \
+                   ${AM_CODEX_FLAGS:--s workspace-write} "${CISO[@]}" --skip-git-repo-check -C "$ROOT" -o "$d/.reply_$lab.md" "$p" \
                    < /dev/null >> "$d/session_$lab.log" 2>&1 ;;
         claude) claude -p "$p" --model "${MODEL[$s]}" ${EFFORT[$s]:+--effort "${EFFORT[$s]}"} $AM_CLAUDE_FLAGS "${ISO[@]}" \
                    < /dev/null > "$d/.reply_$lab.md" 2>> "$d/session_$lab.log" ;;
@@ -226,7 +235,7 @@ $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.m
 echo "$(date '+%F %T') launching agents: $AGENTS"
 rm -f "$META/failed.log"
 set +m
-BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO MANIFEST CLI MODEL EFFORT NATT)
+BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO CISO MANIFEST CLI MODEL EFFORT NATT)
 $(declare -f log manifest fail run_session limit_hit session_until agent_loop)"
 for s in $AGENTS; do
     setsid bash -c "$BOOT"$'\n''agent_loop "$1"' automodel-worker "$s" &

@@ -4,12 +4,14 @@
     python usage_report.py codex  --cwd <project dir> --since 2026-11-01T10:00 [--until ...]
     python usage_report.py claude --cwd <project dir> --since 2026-11-01T10:00 [--until ...]
     python usage_report.py codex|claude --session <session file> [--since ...]
+    --home <dir>: the framework's home when it is not the default ($CODEX_HOME or ~/.codex; $CLAUDE_CONFIG_DIR or
+    ~/.claude), e.g. a separate home used by detached workers.
 
 Usage events are filtered by their own timestamps (UTC, ISO), so a session that started before the window (e.g. a
 meta-agent that began in Setup) contributes exactly its calls inside the window, and nothing outside it. Sessions are
 those whose working directory is the project directory or below it.
-Codex: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl (token_count events; repeated cumulative totals are skipped).
-Claude Code: ~/.claude/projects/<encoded cwd>/<session>.jsonl and <session>/subagents/agent-*.jsonl (message.usage).
+Codex: <home>/sessions/YYYY/MM/DD/rollout-*.jsonl (token_count events; repeated cumulative totals are skipped).
+Claude Code: <home>/projects/<encoded cwd>/<session>.jsonl and <session>/subagents/agent-*.jsonl (message.usage).
 One JSON line per session or in-session sub-agent, then a TOTAL line. Fields: calls; input (gross, = uncached + cache
 reads + cache writes); uncached, cache_read, cache_write (Claude only), output; median context; role (worker if the
 opening prompt is a launch_workers.sh prompt, sub-agent, or main); agent/meta for workers (see launch_manifest.jsonl);
@@ -129,8 +131,13 @@ def codex_file(f, a, check_cwd=True):
     return [out]
 
 
+def home(a, env, default):
+    return os.path.abspath(os.path.expanduser(a.home or os.environ.get(env) or default))
+
+
 def codex(a):
-    files = [a.session] if a.session else sorted(glob.glob(os.path.expanduser('~/.codex/sessions/*/*/*/rollout-*.jsonl')))
+    files = [a.session] if a.session else sorted(glob.glob(os.path.join(
+        glob.escape(home(a, 'CODEX_HOME', '~/.codex')), 'sessions', '*', '*', '*', 'rollout-*.jsonl')))
     return [r for f in files for r in codex_file(f, a, check_cwd=not a.session)]
 
 
@@ -186,7 +193,8 @@ def claude(a):
         sessions = [a.session]
     else:
         enc = re.sub(r'[^A-Za-z0-9]', '-', a.cwd)
-        sessions = sorted(glob.glob(os.path.expanduser('~/.claude/projects/%s*/*.jsonl' % glob.escape(enc))))
+        sessions = sorted(glob.glob(os.path.join(glob.escape(home(a, 'CLAUDE_CONFIG_DIR', '~/.claude')), 'projects',
+                                                 glob.escape(enc) + '*', '*.jsonl')))
     rows = []
     for f in sessions:
         cwd, txt = _opening(f)
@@ -205,7 +213,8 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('framework', choices=('codex', 'claude'))
     ap.add_argument('--cwd', default=os.getcwd()); ap.add_argument('--since', default=''); ap.add_argument('--until', default='')
-    ap.add_argument('--session'); ap.add_argument('--match', default='', help='Claude: only sub-agents whose description contains this')
+    ap.add_argument('--session'); ap.add_argument('--home', help='framework home directory (default: env or ~/.codex, ~/.claude)')
+    ap.add_argument('--match', default='', help='Claude: only sub-agents whose description contains this')
     a = ap.parse_args()
     a.cwd = os.path.abspath(os.path.expanduser(a.cwd))
     for name in ('since', 'until'):
