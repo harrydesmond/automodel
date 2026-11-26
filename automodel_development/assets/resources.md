@@ -57,7 +57,9 @@ supervise attempts:
 ## 3. Waiting and context rules (for prompts and COMMON_PROMPT.md)
 Input ≈ model calls × context per call, and every call re-reads the whole context, so long sessions dominate: the
 number of calls and the size the context grows to matter more than any single output. Price uncached input, cache
-writes/reads and output separately; gross tokens alone do not measure cost.
+writes/reads and output separately; gross tokens alone do not measure cost. Output (reasoning included) and cache
+writes can outweigh cache reads even when reads dominate the token count; context grows mostly from what an agent
+writes (scripts, candidate files, reasoning), less from tool results.
 - Do not poll from a model session. Prefer phase sessions (§2); otherwise completion notifications; otherwise a
   harness wait command used close to the longest single blocking call the framework allows (`frameworks.md`), then
   check once. A shell watcher may poll internally without waking the model.
@@ -68,8 +70,16 @@ writes/reads and output separately; gross tokens alone do not measure cost.
   budget, §5) and end a phase rather than letting a session grow.
 - Long outputs go to files; print tails (≤ ~40 lines). The harness's record and card replace hand-written tables; the
   card should carry the diagnostics agents need most (e.g. error breakdowns by the main data dimensions), so agents
-  do not each re-derive them. Keep prose short: plan ≤ 150 words, rationale ≤ 200, `summary.md` ≤ 800, final reply a
-  few lines.
+  do not each re-derive them. Keep prose short: plan ≤ 150 words, rationale ≤ 200, summary ≤ 300, final reply ≤ 3
+  lines. A summary holds what the meta-agent needs to understand and reproduce the result (record IDs, the best
+  structure, each failure with its cause in a line, reusable components, the next step), not a restatement of the
+  brief or of everything tried.
+- One model call per evaluation batch: the harness's submit blocks until results arrive (or the wait limit) and
+  prints one line per candidate; details on request.
+- Reuse and parameterise scripts; edit them rather than write variants. Put reusable tools in the shared toolkit
+  (`phases/3_iterate.md` §1).
+- End a session after about 50 model calls: update `notes.md` and continue in a fresh session (phase sessions, or a
+  fresh in-session agent launched with the notes). Splitting resets the context more cleanly than compacting it.
 - Stay within the direction and the budget; no unplanned side audits or score-only reruns. If reproduction, provenance or
   scoring contradicts the plan, stop the affected comparison, send one short blocker with the evidence, and run only
   the smallest diagnostic needed.
@@ -81,6 +91,7 @@ their estimated cost and uncertainty, when measured cost or quality warrants it:
 directions (convergence refits, speed-ups at fixed accuracy, fixed-protocol measurements), the strongest model for
 directions that must diagnose failures and overturn their own brief, or fewer agents at a higher level. Name concrete
 models (`frameworks.md`), not tiers. None of these allocations has been compared under controlled conditions.
+Effort is the main control on output tokens: offer lower effort for mechanical directions.
 
 ## 5. Budget and estimates
 - The approved evaluation budget (screens and scored fits per attempt; run-wide fit, wall-time and compute caps,
@@ -92,8 +103,8 @@ models (`frameworks.md`), not tiers. None of these allocations has been compared
   evaluated together) buys progress per hour with usage and compute; sequence costs wall time.
 - Do not convert tokens into a share of an allowance or into money without the user's reading or prices.
 - **Token budget: a guide, not a limit.** Plan one per meta-iteration (S × I × tokens per attempt, with tokens per
-  attempt ≈ model calls × median context; take both from the previous meta-iteration's usage log, or a rough guess
-  for the first, and say which). Give agents the corresponding soft guide (calls per attempt, how often to end a
+  attempt ≈ model calls × median context; take both from the previous meta-iteration's usage log, or for the
+  first from a measured pilot session, since unmeasured guesses have been several times too low; say which). Give agents the corresponding soft guide (calls per attempt, how often to end a
   phase) in COMMON_PROMPT.md. Do not spend significant effort pinning the estimate down, and never stop, cancel or
   disrupt agents for exceeding it: token use is hard to predict. Report planned against actual after every
   meta-iteration (§6) and use the difference to re-plan S, I, models, effort and the context rules (§7).
@@ -114,4 +125,5 @@ Re-choose directions, S, I, allocations and the token budget from the last meta-
 premise is wrong or another component limits it, not merely because one round gained nothing; keep a bounded share
 for distinct untested hypotheses, and record why each direction continues, merges or stops. Diagnose wasted fits before
 changing screening instructions or agent-model allocation. Review persistent gate failures; propose continued work, a changed
-requirement or no eligible result. Report the plan; obtain approval for changes outside delegated scope.
+requirement or no eligible result. Report the plan; obtain approval for changes outside delegated scope. After the
+first meta-iteration, prefer fewer agents and one direction that merges the best lineages.

@@ -34,6 +34,10 @@ replication).
 - **Requirements**: decide for each whether it is a hard gate (candidates failing it are rejected), part of the score,
   or reported only; specify its statistic, population and evaluation phase. Downstream-impact claims require a
   representative analysis, including its likelihood and priors; otherwise label them diagnostic.
+- **Gate feasibility:** apply each hard gate to an oracle (the target itself, a flexible fit, the target under
+  realistic perturbation) and check that a flexible model's loss optimum passes it. A gate no oracle passes, or one
+  the loss optimum drifts out of, is a protocol defect: fix it now. A gate checked at a single point invites
+  overfitting there; also check it at held-out points.
 - **Selection score**:
   - Not complexity-penalised (RMSE, log-loss, …): for predictive selection, measured out of sample on a validation
     set or by (grouped, stratified or time-ordered) cross-validation. A deliberately descriptive in-sample comparison
@@ -58,6 +62,7 @@ replication).
 - A reserved dataset is excluded from the agents' inputs and refused by the evaluator before any scoring, references
   included. Record earlier exposure (e.g. benchmarking references on it) and sibling runs sharing it, and state what
   may be refitted at the final check. For later independent claims, plan access to fresh evidence.
+- Keep reference results and reserved data outside the tree that agents and their harness commands read.
 
 ## 5. Optimization routine
 Implement or confirm a parameter optimizer (prefer libraries), with seeds, restarts and a stop criterion.

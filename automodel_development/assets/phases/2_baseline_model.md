@@ -31,6 +31,10 @@ description: Second phase. Build the baseline and a shared attempt harness, test
   output as a failed work unit with its reason and carries on; it never stops on one, which would block the attempt.
 - The card carries the diagnostics agents need most (error breakdowns by the main data dimensions and by the
   regions the requirements single out), so agents do not each re-derive them in their sessions.
+- A **shared toolkit** of the analyses agents would otherwise each write: evaluation at fixed constants, residual
+  breakdowns, the linearised gain of adding a term with the rest held fixed, per-gate diagnostics (which component
+  fails and by how much) and oracle floors, each with a test so later fixes can be checked. A sanctioned cheap screen
+  removes the need for private fitters. Submit and wait are one blocking call.
 
 ## 2. Evaluator tests (required)
 Run the required evaluator checks in `assets/checks.md`. Implement the complete decision rule once — eligibility, tie grouping, and the order of any
@@ -44,7 +48,11 @@ Use a sub-agent (or this session, if sub-agents are unavailable) to run the full
 default settings, through the execution path the search will use (local, cluster, detached workers): fit, predict,
 record, card, validator; for heavy searches also job submission, waiting, the `.job` marker and harvesting after an
 interruption and with one output missing or truncated. Record the time and compute of one evaluation and the pilot's wall time (heavy: its model, effort and
-usage), and revisit the light/heavy classification if they differ from Phase 1's estimate.
+usage), and revisit the light/heavy classification if they differ from Phase 1's estimate. The pilot also checks the
+exact remote submission (shell expansion on the remote side, resource requests against node sizes, unhealthy nodes),
+installs new dependencies only outside the reference environment, measures tokens per agent session, and lists the
+tools its agent wrote as toolkit candidates. Generate the brief's statements about the data (ranges, spacing, units)
+from the data.
 
 ## 4. References and baseline
 Score the plan's references and the baseline at default settings; refit deeply (more starts, new seeds) only those

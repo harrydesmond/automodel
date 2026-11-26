@@ -25,6 +25,11 @@ harness and decision rule; its share of the evaluation budget; the attempt contr
 outcome recorded through the harness (result or recorded failure, short rationale) and no job pending; attempts change
 structure unless the direction explicitly assigns a bounded convergence, recalibration or execution comparison
 (record such gains as what they are, not as structural discoveries); the waiting and context rules (`resources.md` §3).
+Agents keep reusable tools in a shared `tools/` folder with one line each in `tools/INDEX.md`, and check it before
+writing a tool. An agent that finds a fault or limitation in a shared tool writes the fix as a new version, logs it in
+`tools/CHANGES.md` (fault, evidence, test) and tells the orchestrator; agents read `CHANGES.md` at the start of each
+attempt. Faults in anything that sets scores, records or eligibility are reported, not edited: the orchestrator fixes
+them.
 
 Before launching, update the `CONTEXT.md` status (active round, protocol version, remaining budget, next action) and
 tell the user: m of M, the current best eligible score, the budget left, and when to expect the next
@@ -49,11 +54,18 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
 ### 3. Review (meta-agent)
 - **Validate.** Quarantine attempts without a validated result (crash, NaN, unfinished job) and keep earlier valid ones
   from the same agent. Harvest or cancel owned pending jobs. Compare only validated candidates.
-- **Refit the shortlist** under comparable settings (`checks.md`, convergence). When search fits use a subsample,
+- **Refit the shortlist** under comparable settings and from new starts (`checks.md`, convergence): an eligible fit
+  can be a local optimum or sit on a validity bound. When search fits use a subsample,
   refit the shortlist on the full training data at boundaries the budget allows: subsample fits can understate both
   a candidate's performance and a direction's promise.
 - **Recombine** compatible parts of different agents' candidates (often the winners), checking imported helpers
   (`checks.md`, components); choose the next seeds.
+- **Verify** agents' claims that would shape the next brief (floors, infeasibility, "cannot help") with an
+  independent check.
+- **Check and promote tools:** verify each logged fix independently (reproduce the fault, run the tests) and keep or
+  revert it, at once if other agents are using the tool; merge duplicated tools into the harness, with tests; list
+  both in the next brief. Change harness code that agents use only by testing a copy and swapping it in; a change that
+  alters scores is a protocol change (new version, rescore).
 - **Usage**: one line (light) or the usage log (heavy; `resources.md` §6); proposals, screens and scored fits counted
   separately against the budget; tokens against the meta-iteration's token budget (a guide, never enforced), with the
   calls and context that drove them.
@@ -65,6 +77,7 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
   when the data, evaluator or protocol changed, a result is disputed, or the stakes warrant it.
 - Write `meta_m/review.md` (results table, what worked and did not, decisions), then update the `CONTEXT.md` status
   (completed round, incumbent, budget, pending jobs with their receipts, next action) before any further launch.
+  Then checkpoint your context (`SKILL.md`).
 
 ### 4. Report and continue
 Send the user a short progress message: best eligible score and the attempt that produced it (with any reported-only

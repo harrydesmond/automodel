@@ -39,6 +39,9 @@ sub-agents.
 - **Visible progress.** Report before each launch, during long phases, and after every meta-iteration; pause there for
   the user's review if the plan says so (default: light searches continue, heavy searches pause). A stop request takes
   effect before any further submission.
+- **Checkpoint your own context.** At each phase boundary and after each meta-iteration review, update `CONTEXT.md`
+  so a fresh session can resume, then ask the user to compact or to resume in a fresh session: the orchestrator's
+  context is re-read on every call.
 
 ## Supporting files
 - `assets/RUN_PLAN.md`: plan template. `assets/checks.md`: required evaluator checks and a menu of conditional ones.

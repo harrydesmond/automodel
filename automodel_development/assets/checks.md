@@ -68,6 +68,8 @@ Choose by the cost of a wrong result versus the cost of the check; record what y
 - *Stress the claims* with a budgeted fresh sample and targeted boundary, endpoint and singularity checks; label
   sampled accuracy as such (a region-wide guarantee needs analytic bounds or a certified search).
 - *Interpretations are hypotheses* until tested by an intervention.
+- *Rendering:* show compared models in one format, at a precision at which each rendering still reproduces its fitted
+  score.
 - *Number audit:* check reported quantities against identified records, units, populations and rounding; fail on
   mismatches and state coverage. Finding the number elsewhere in a document is insufficient.
 - *Independent audit* for high-stakes results: a fresh agent reimplements the evaluation; reproduce its findings

@@ -26,9 +26,12 @@ from exposed tool choices or a verified model list; CLI `--model` accepts names 
 - **Usage:** completion notices give per-agent tokens and duration; `usage_report.py claude` reads the session logs
   (`~/.claude/projects/`). Local transcripts expire after some weeks: keep prompts and returns in the project. The
   allowance reading (`/usage`) comes from the user.
-- **Known behaviour:** writes of report-like files by sub-agents are sometimes refused; have them return the text and
-  save it yourself. A usage-limit stop ends all running in-session sub-agents at once; detached workers stop with a
+- **Known behaviour:** writes of report-like files by sub-agents are sometimes refused; have them return the text
+  (within the summary limit: it enters your context) and save it yourself. A usage-limit stop ends all running in-session sub-agents at once; detached workers stop with a
   "hit your … limit" (rate_limit, HTTP 429) error, which the launcher waits through.
+- **Context:** the orchestrator cannot compact itself; at checkpoints ask the user to `/compact`, or to start a new
+  session that resumes from `CONTEXT.md` (usually leaner). An in-session sub-agent re-reads its fixed context (system
+  prompt, tools, loaded instruction files) on every call; check its size from the first call in the usage log.
 
 ## Codex (CLI checked on 0.167.0; tools vary by session)
 - **In-session:** use exposed agent tools and limits. Full-history forks may require inherited model/effort; supply
