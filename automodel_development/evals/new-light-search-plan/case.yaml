@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: new-light-search-plan
+expected_outcome: |
+  A walkthrough of the setup phase for a light search, ending at the request to approve a filled light run plan, with no code run.
+context:
+  scaffold_script: place-files.sh

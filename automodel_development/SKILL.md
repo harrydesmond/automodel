@@ -1,6 +1,6 @@
 ---
 name: automodel-development
-description: Guides the user in discovering a better model structure (e.g. from feature transformations in logistic regression to equation terms within PDEs to neural network layer compositions) out of data. Use when the user asks to create or improve an existing model. Uses an iterative meta/inner agent loop to explore structural model modifications in parallel, sized from quick in-session searches to long runs on detached worker sessions.
+description: Development version of automodel: discovers a better model structure from data (feature transformations, equation terms in ODEs or PDEs, neural-network layer compositions) with a meta-agent directing parallel sub-agents or detached worker sessions, from quick in-session searches to multi-day cluster runs. Only invoked when the user explicitly asks for /automodel-development, "use automodel-development" or the development version of automodel, including resuming such a run. Requests that name plain automodel, or ask for a model-structure search without naming this skill, do not invoke it.
 license: Apache-2.0
 ---
 
@@ -12,7 +12,7 @@ sub-agents.
 
 | Phase | Recipe | Done when |
 |---|---|---|
-| **1 — Setup** | `assets/phases/1_setup.md` | Plan approved (`RUN_PLAN.md`); evaluator and data ready |
+| **1 — Setup** | `assets/phases/1_setup.md` | Plan approved (`RUN_PLAN.md`); `CONTEXT.md` created |
 | **2 — Baseline** | `assets/phases/2_baseline_model.md` | Harness tested end to end; baseline and references scored |
 | **3 — Iterate** | `assets/phases/3_iterate.md` | Stop rule, budget or the user ends the search |
 | **4 — Finalize** | `assets/phases/4_finalize.md` | Outcome recorded (an unsuccessful search is a valid outcome) |
@@ -22,8 +22,11 @@ sub-agents.
    creates `CONTEXT.md`).
 2. Otherwise read its status block (phase, step, active meta-iteration, protocol version, budget, pending jobs, next
    action), check that the files it points to exist and validate, and resume the first incomplete step. A directory's
-   existence is not completion. If the status is unclear, `bash <skill>/scripts/read_phases.sh` prints each phase's
-   entry and exit conditions.
+   existence is not completion. Where status and disk disagree (a recorded launcher or job no longer running, a
+   missing file), trust the disk: reconcile jobs from their receipts, reclaim stale locks with the launcher, and tell
+   the user what you found, what you will restart and what it may still spend against the remaining budget, before
+   starting anything. If the phase is unclear,
+   `bash <skill>/scripts/read_phases.sh` prints each phase's entry and exit conditions.
 3. Load only the current phase's recipe; it says which supporting file to read and when.
 
 ## Working with the user
@@ -38,14 +41,16 @@ sub-agents.
   show your choice in the plan as [proposed]; never settle it unseen.
 - **Visible progress.** Report before each launch, during long phases, and after every meta-iteration; pause there for
   the user's review if the plan says so (default: light searches continue, heavy searches pause). A stop request takes
-  effect before any further submission.
+  effect before any further submission: create `STOP` in the active `meta_m/`, which the launcher and harness check.
 - **Checkpoint your own context.** At each phase boundary and after each meta-iteration review, update `CONTEXT.md`
-  so a fresh session can resume, then ask the user to compact or to resume in a fresh session: the orchestrator's
-  context is re-read on every call.
+  so a fresh session can resume. At a pause the plan already has, or once your context is large, also ask the user to
+  compact or to resume in a fresh session: the orchestrator's context is re-read on every call.
 
 ## Supporting files
+`<skill>` is this skill's folder.
 - `assets/RUN_PLAN.md`: plan template. `assets/checks.md`: required evaluator checks and a menu of conditional ones.
 - `assets/resources.md`: search size (light or heavy), orchestration, waiting, models, budgets, usage accounting, re-planning.
+- `assets/detached.md`: detached workers (brief, permissions, launch, watching); `assets/COMMON_PROMPT.md`: their brief.
 - `assets/frameworks.md`: Claude Code and Codex mechanics (sub-agents, detached workers, waits, permissions, usage,
   workers on a cluster).
 - `<skill>/scripts/`: `launch_workers.sh` (detached workers, run from the project root: phase sessions at job

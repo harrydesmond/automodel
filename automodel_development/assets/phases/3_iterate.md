@@ -13,13 +13,13 @@ description: Third and main phase. Run M meta-iterations of S parallel agents ma
 2. **Working mode.** *Agents iterate* (default): each agent proposes, fits and evaluates its own attempts. *Batch
    proposals*: agents return candidates, the meta-agent fits them centrally; suits candidates that are strings or
    small edits scored by a cheap evaluator. Hybrids are fine.
-3. **Orchestration** (`assets/resources.md` §2): in-session sub-agents, or detached workers for long evaluations.
+3. **Orchestration** (`assets/resources.md` §2): in-session sub-agents, or detached workers for long evaluations (`assets/detached.md`).
 4. **Plan.** Use the approved light plan or heavy part B. Fill missing decisions using `RUN_PLAN.md` and
    `resources.md` §4–5; obtain approval for changes outside delegated scope or a material budget increase.
 
 ## Execution — for each meta-iteration m
 ### 1. Launch
-Each agent works only in `meta_m/agent_s/` and gets: its seed (the baseline, or the seeds the last review chose; with
+Each agent writes only in `meta_m/agent_s/` and the shared `tools/`, and gets: its seed (the baseline, or the seeds the last review chose; with
 several targets, the incumbent for each); its direction and scope limits; relevant `references/` material; the shared
 harness and decision rule; its share of the evaluation budget; the attempt contract — each attempt ends with its
 outcome recorded through the harness (result or recorded failure, short rationale) and no job pending; attempts change
@@ -27,7 +27,7 @@ structure unless the direction explicitly assigns a bounded convergence, recalib
 (record such gains as what they are, not as structural discoveries); the waiting and context rules (`resources.md` §3).
 Agents keep reusable tools in a shared `tools/` folder with one line each in `tools/INDEX.md`, and check it before
 writing a tool. An agent that finds a fault or limitation in a shared tool writes the fix as a new version, logs it in
-`tools/CHANGES.md` (fault, evidence, test) and tells the orchestrator; agents read `CHANGES.md` at the start of each
+`tools/CHANGES.md` (fault, evidence, test) and tells the orchestrator (detached workers: in `BLOCKER.md`); agents read `CHANGES.md` at the start of each
 attempt. Faults in anything that sets scores, records or eligibility are reported, not edited: the orchestrator fixes
 them.
 
@@ -36,10 +36,11 @@ tell the user: m of M, the current best eligible score, the budget left, and whe
 update.
 
 - **In-session:** launch the S sub-agents in parallel in one message, fresh for each meta-iteration. If a usage limit
-  stops them, resume each after the reset with an instruction to harvest pending jobs first.
+  stops them (it stops all at once), resume each after the reset with an instruction to harvest pending jobs first.
+  Sub-agents are sometimes refused writes of report-like files: have them return the text, and save it yourself.
 - **Detached (heavy):** preflight each seed through the harness to reproduce its score; prepare launch inputs
   (with `job_state.sh` when evaluations are scheduler jobs, so sessions end at job boundaries; the token budget's soft
-  guide in COMMON_PROMPT.md), launch and watch as in `resources.md` §2.
+  guide in COMMON_PROMPT.md), launch and watch as in `detached.md`.
 
 ### 2. Attempts (each agent, I times)
 Plan one structural modification (or the explicitly assigned control) from the previous results, especially where the model fits worst; screen cheaply
@@ -94,6 +95,6 @@ work, change the requirement, or no eligible result); a change to the rule or ga
 version, and the original result is still reported.
 
 Present the best score per meta-iteration (plot), the changes that drove it, and the usage, time and compute spent, with
-the estimated cost of one more meta-iteration. The user continues (back to Setup, numbering on) or ends the search.
+the estimated cost of one more meta-iteration. The user continues (back to Phase 3 Setup, numbering on) or ends the search.
 Stop every server, queued job or background process the search started. Update `CONTEXT.md`: best eligible candidate
 and its files, final search summary, why the search stopped.

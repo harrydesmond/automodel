@@ -13,11 +13,15 @@ come back skipped or partly answered.
 
 ## 0. Feasibility and size
 - Confirm language/runtime and libraries, and whether sub-agents can be spawned with file and shell access. If not,
-  agents run sequentially in this session; record that. Heavy searches with detached workers: check the platform
-  (bash ≥ 4, `pgrep`, `setsid`) and which permission settings the user will approve.
+  agents run sequentially in this session; record that. Heavy searches with detached workers: run
+  `<skill>/scripts/tests/run_tests.sh` where the launcher will run (for a launcher run as a cluster job, in a short
+  job on that kind of node), and ask which permission settings
+  the user will approve.
 - Time one evaluation (a fit plus scoring) if it takes seconds; otherwise estimate or ask how long it takes and where it runs, and classify the search as
   light or heavy (`assets/resources.md` §1). Heavy: ask the user's limits on usage, wall time and compute, and read
-  `assets/frameworks.md` for this framework's mechanics.
+  `assets/frameworks.md` for this framework's mechanics. Ask whether the run must continue while the user is away:
+  the launcher's host and the work queued for the absence are then plan decisions (`detached.md` §3).
+- Decide which data are reserved (§4) before scoring anything, so that no setup score touches them.
 
 ## 1. Goal and claims
 Domain vocabulary (loss vs cost, features vs covariates…); what the model is for (input range, extrapolation,
@@ -35,7 +39,8 @@ replication).
   or reported only; specify its statistic, population and evaluation phase. Downstream-impact claims require a
   representative analysis, including its likelihood and priors; otherwise label them diagnostic.
 - **Gate feasibility:** apply each hard gate to an oracle (the target itself, a flexible fit, the target under
-  realistic perturbation) and check that a flexible model's loss optimum passes it. A gate no oracle passes, or one
+  realistic perturbation) and check that a flexible model's loss optimum passes it (with expensive fits, check the
+  oracle targets now and the flexible fit in Phase 2's pilot). A gate no oracle passes, or one
   the loss optimum drifts out of, is a protocol defect: fix it now. A gate checked at a single point invites
   overfitting there; also check it at held-out points.
 - **Selection score**:

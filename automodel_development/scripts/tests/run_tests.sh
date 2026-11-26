@@ -20,6 +20,8 @@ setup; rm meta_1/done_attempt.sh; check "refuses to start without a completion v
 setup; rc=$(run); check "normal run: exit 0, all attempts and summaries" '[ "$rc" = 0 ] && [ -s meta_1/agent_2/summary.md ] && [ -f meta_1/agent_1/attempt_2/result.json ]'
 check "manifest records start/end of every session" '[ "$(grep -c "\"event\":\"end\"" meta_1/launch_manifest.jsonl)" = 6 ]'
 check "status counts validated attempts" 'bash "$S/worker_status.sh" meta_1 | grep -q "agent 1: 2/2 validated"'
+printf 'first\nharness refuses gate G2 rows\n' > meta_1/agent_2/BLOCKER.md
+check "status shows an agent's latest blocker" 'bash "$S/worker_status.sh" meta_1 | grep -q "BLOCKER: harness refuses gate G2 rows"'
 setup
 mkdir -p meta_1/agent_1/attempt_1 meta_1/agent_1/attempt_1b
 for a in attempt_1 attempt_1b; do echo '{"status":"ok"}' > "meta_1/agent_1/$a/result.json"; done
@@ -40,6 +42,8 @@ setup; rc=$(FAKE_MODE=flaky FAKE_COUNTER=$T/cnt run 1); check "transient failure
 setup; printf '#!/bin/sh\nexit 17\n' > meta_1/after_agent.sh; chmod +x meta_1/after_agent.sh; rc=$(run)
 check "failing after_agent hook fails the run" '[ "$rc" = 1 ] && grep -q "after_agent.sh exit 17" meta_1/failed.log'
 setup; touch meta_1/STOP; rc=$(run); check "STOP: nothing starts, exit 3" '[ "$rc" = 3 ] && [ ! -d meta_1/agent_1/attempt_1 ]'
+setup; rc=$(AM_STOP_AT="1 hour ago" run); check "past deadline: nothing starts, exit 3" '[ "$rc" = 3 ] && [ ! -d meta_1/agent_1/attempt_1 ] && grep -q deadline meta_1/launch.log'
+setup; rc=$(AM_STOP_AT="not a date" run); check "unreadable deadline is refused" '[ "$rc" = 1 ] && grep -q "unreadable date" meta_1/launch.log'
 setup; FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/launch.log 2>&1 & L=$!; sleep 2
 check "second launcher refused while one runs" '[ "$(run)" = 1 ]'
 kill -TERM $L; wait $L 2>/dev/null; sleep 1
@@ -53,6 +57,10 @@ check "simultaneous launchers: exactly one runs" '[ "$nl" = 1 ] && [ "$(grep -c 
 kill -TERM $(cat meta_1/.lock/launcher) 2>/dev/null; wait $B 2>/dev/null
 setup; mkdir -p meta_1/.lock; echo 999999 > meta_1/.lock/launcher; : > meta_1/.lock/groups
 check "stale lock blocks launch until --reclaim" '[ "$(run)" = 1 ] && bash "$S/launch_workers.sh" --reclaim meta_1 >/dev/null && [ "$(run)" = 0 ]'
+setup; mkdir -p meta_1/.lock; echo $$ > meta_1/.lock/launcher; : > meta_1/.lock/groups; echo "$(hostname) boot-before" > meta_1/.lock/host
+check "lock from before a reboot is stale even if its PID is now in use" '[ "$(run)" = 1 ] && grep -q "stale lock" meta_1/launch.log && bash "$S/worker_status.sh" meta_1 | grep -q "before a reboot" && bash "$S/launch_workers.sh" --reclaim meta_1 | grep -q "before a reboot" && [ "$(run)" = 0 ]'
+setup; mkdir -p meta_1/.lock; echo 999999 > meta_1/.lock/launcher; : > meta_1/.lock/groups; echo "otherhost-x b" > meta_1/.lock/host
+check "lock taken on another host is not reclaimed here" '[ "$(run)" = 1 ] && grep -q "taken on otherhost-x" meta_1/launch.log && ! bash "$S/launch_workers.sh" --reclaim meta_1 2>/dev/null && [ -d meta_1/.lock ] && bash "$S/worker_status.sh" meta_1 | grep -q "taken on otherhost-x"'
 setup; run >/dev/null; printf '#!/bin/sh\ntouch "$1/HOOKRAN"\n' > meta_1/after_agent.sh; chmod +x meta_1/after_agent.sh; rm -f meta_1/agent_*/.after_agent.done; touch meta_1/STOP; rc=$(run)
 check "STOP blocks a pending after_agent hook" '[ "$rc" = 3 ] && [ ! -f meta_1/agent_1/HOOKRAN ]'
 setup; FAKE_MODE=badmodel run >/dev/null; rc=$(FAKE_MODE=flaky FAKE_COUNTER=$T/cnt run 1)
@@ -102,6 +110,9 @@ csetup; rc=$(FAKE_MODE=limit FAKE_LIMITS=4 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=0 A
 check "usage limit: waits without spending retries, then finishes" '[ "$rc" = 0 ] && [ "$(grep -c "usage/rate limit" meta_1/agent_1/sessions.log)" = 4 ]'
 csetup; rc=$(FAKE_MODE=limit FAKE_LIMITS=4 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=0 AM_LIMIT_MAX_H=0 AM_MAX_TRIES=1 run 1)
 check "usage limit: zero waiting budget falls back to the retry cap" '[ "$rc" = 1 ]'
+csetup; t0=$(date +%s); rc=$(FAKE_MODE=limit FAKE_LIMITS=1000 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=1 AM_STOP_AT="@$(( t0 + 3 ))" run 1); dt=$(( $(date +%s) - t0 ))
+check "deadline ends a usage-limit wait (exit 3) and leaves STOP for harness and workers" '[ "$rc" = 3 ] && [ "$dt" -le 10 ] && grep -q "STOP or deadline" meta_1/agent_1/sessions.log && [ -f meta_1/STOP ]'
+setup; rc=$(AM_STOP_AT="1 hour" run); check "a launcher that finishes before its deadline leaves no STOP behind" '[ "$rc" = 0 ] && [ ! -f meta_1/STOP ]'
 csetup; printf '#!/bin/sh\nf="$1/.running"; [ -f "$f" ] || exit 2\nn=$(cat "$f"); if [ "$n" -gt 0 ]; then echo $((n-1)) > "$f"; exit 0; fi; rm -f "$f"; exit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
 rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_JOB_POLL=0 AM_MAX_TRIES=1 run 1)
 check "phase sessions: end at a job, resume when it finishes, no retry spent" '[ "$rc" = 0 ] && [ -f meta_1/agent_1/attempt_1/result.json ] && grep -q "resumes after jobs" meta_1/agent_1/sessions.log'
@@ -109,6 +120,13 @@ check "phase sessions: the resume session gets the resume prompt and the hand-of
 csetup; printf '#!/bin/sh\nexit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
 rc=$(FAKE_MODE=stuck AM_JOB_POLL=0 AM_RETRY_WAIT=0 AM_MAX_TRIES=2 run 1)
 check "phase sessions: repeatedly uncollected results spend retries, not free phases" '[ "$rc" = 1 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 3 ]'
+csetup; rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_MAX_TRIES=1 run 1)
+check "voluntary hand-off (fresh STATE.md, no job pending) resumes without spending a retry" '[ "$rc" = 0 ] && grep -q "handed over to a fresh session" meta_1/agent_1/sessions.log && grep -q "Resume attempt 1" "$T/prompts"'
+csetup; AM_CLAUDE_FLAGS="--allowedTools 'Bash(python3 harness/submit.py:*)' Read" rc=$(FAKE_ARGS=$T/args run 1)
+check "permission flags keep quoted rules with spaces as one argument" '[ "$rc" = 0 ] && grep -qxF "Bash(python3 harness/submit.py:*)" "$T/args" && grep -qx "Read" "$T/args"'
+csetup; AM_CLAUDE_FLAGS="--allowedTools 'Bash(x" rc=$(run 1); check "unbalanced quotes in permission flags are refused" '[ "$rc" = 1 ] && grep -q "unbalanced quotes" meta_1/launch.log'
+csetup; AM_CLAUDE_FLAGS="--allowedTools 'Edit({agent_dir}/**)'" rc=$(FAKE_ARGS=$T/args run 1)
+check "{agent_dir} in permission flags becomes the worker's own folder" '[ "$rc" = 0 ] && grep -qxF "Edit(meta_1/agent_1/**)" "$T/args"'
 csetup; rc=$(FAKE_ARGS=$T/args run 1); cp "$T/args" "$T/args.iso"
 check "isolation: claude workers exclude outside instruction files, memory, skills and MCP" '[ "$rc" = 0 ] && grep -q -- "--disable-slash-commands" "$T/args" && grep -q "claudeMdExcludes" "$T/args" && grep -q "autoMemoryEnabled" "$T/args"'
 csetup; rc=$(FAKE_ARGS=$T/args AM_ISOLATE=0 run 1)

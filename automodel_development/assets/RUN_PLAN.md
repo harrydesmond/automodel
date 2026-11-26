@@ -10,6 +10,8 @@
    tie grouping, margin needed to replace the incumbent>; <other checks> are reported only." Shown on: <a known
    reference, computed if cheap, and how it is ranked or rejected; known references the gates exclude>
 3. **Evaluation:** <evaluator; references; fit settings; external check or "none: exploratory, no independent check">
+   **Requirements and checks:** <each requirement a hard gate / in the score / reported only; complexity limits;
+   checks adopted, "N/A because …" for the rest>
 4. **Work:** <fit cap and elapsed-time cap; initial M, S, I; stop rule; where computation runs>
 5. **Authority and progress:** <what you may change without asking; pause between meta-iterations (default off)>
 
@@ -27,7 +29,8 @@
    baselines, failures, refits and recombinations; seeds/restarts per stage>. **Token budget** (guide, not enforced):
    <per meta-iteration; reported against actual after each one>
 8. **References:** <which, at which settings; expected time>
-9. **Execution:** <where computation runs; worker permissions (write roots, network, compute) if detached>
+9. **Execution:** <where computation runs; worker permissions (write roots, network, compute) if detached; where the
+   launcher runs, and whether the run continues while the user is away>
 10. **Checks:** <adopted from checks.md; N/A because …>
 11. **Estimate:** <usage, wall time, compute, including agreed finalization and contingency; what is
     unmeasured>
@@ -38,7 +41,8 @@
 14. **Directions and seeds:** <one line per agent>
 15. **Models and effort:** <meta-agent; sub-agents; alternatives offered>
 16. **Estimate from calibration:** <usage, wall time, compute>
-17. **Progress and pauses:** <update cadence; pause between meta-iterations (default on)>
+17. **Progress and pauses:** <update cadence; pause between meta-iterations (default on); for unattended periods, the
+    work queued, the idle time the user accepted, and the deadline (`AM_STOP_AT`)>
 18. **Delegated changes:** <e.g. directions, seeds, S and I within the budget; anything else needs approval>
 
 ## Approvals and changes

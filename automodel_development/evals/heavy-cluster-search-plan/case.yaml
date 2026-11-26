@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: heavy-cluster-search-plan
+expected_outcome: |
+  A walkthrough of the setup phase for a heavy cluster search with detached workers, ending at the request to approve the setup part of the plan, plus an outline up to the first worker launch.
+context:
+  scaffold_script: place-files.sh

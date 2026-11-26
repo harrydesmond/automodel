@@ -9,7 +9,9 @@ set -u
 META=${1:?usage: worker_status.sh <meta_dir> [--wait seconds]}; META=${META%/}
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 LOCK=$META/.lock
-running() { alive "$(cat "$LOCK/launcher" 2>/dev/null)"; }
+here() { echo "$(hostname) $(cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo -)"; }
+lock_host() { local w; w=$(cat "$LOCK/host" 2>/dev/null); [ -n "$w" ] || w=$(here); echo "$w"; }   # no record (older lock): local
+running() { [ "$(lock_host)" = "$(here)" ] && alive "$(cat "$LOCK/launcher" 2>/dev/null)"; }
 newfail() { [ -s "$META/failed.log" ] && [ "$META/failed.log" -nt "$LOCK/groups" ]; }
 if [ "${2:-}" = "--wait" ]; then        # start this after the launcher has registered; returns at once if none runs
     wait_s=${3:-3600}
@@ -21,6 +23,10 @@ if [ "${2:-}" = "--wait" ]; then        # start this after the launcher has regi
     done
 fi
 if running; then echo "launcher: RUNNING (pid $(cat "$LOCK/launcher"))"
+elif [ -d "$LOCK" ] && [ "$(lock_host | cut -d' ' -f1)" != "$(hostname)" ]; then
+    echo "launcher: lock taken on $(lock_host | cut -d' ' -f1); check it there (processes on another host cannot be seen here)"
+elif [ -d "$LOCK" ] && [ "$(lock_host)" != "$(here)" ]; then
+    echo "launcher: not running; STALE LOCK from before a reboot; reclaim with launch_workers.sh --reclaim $META"
 elif [ -d "$LOCK" ]; then
     live=""; for g in $(cat "$LOCK/groups" 2>/dev/null); do kill -0 -- "-$g" 2>/dev/null && live="$live $g"; done
     echo "launcher: not running; STALE LOCK (live worker groups:${live:- none}); reclaim with launch_workers.sh --reclaim $META"
@@ -41,4 +47,5 @@ for d in $(ls -d "$META"/agent_* 2>/dev/null | sort -V); do
     echo "agent $s: $n/${tot:-?} validated; now $(basename "${cur:-none}") $st$([ -s "$d/summary.md" ] && echo '; summary.md written')"
     [ -n "$card" ] && echo "    latest card ($(basename "$(dirname "$card")")): $(head -n 1 "$card" | cut -c1-150)"
     tail -n 1 "$d/sessions.log" 2>/dev/null | sed 's/^/    last: /'
+    if [ -s "$d/BLOCKER.md" ]; then echo "    BLOCKER: $(tail -n 1 "$d/BLOCKER.md" | cut -c1-150)"; fi
 done

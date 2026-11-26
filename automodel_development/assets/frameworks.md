@@ -9,8 +9,12 @@ from exposed tool choices or a verified model list; CLI `--model` accepts names 
   plan asks for it). Launch a meta-iteration's agents in one message, in the background; resume a stopped one with
   SendMessage. The orchestrator is the session's model, chosen by the user (`/model`).
 - **Detached workers:** `claude -p "<prompt>" --model <model> --effort <low|medium|high|xhigh|max>` plus the approved
-  permission flags in `AM_CLAUDE_FLAGS` (e.g. `--permission-mode acceptEdits` with `--allowedTools` for the commands
-  the harness needs; `bypassPermissions` only if the user explicitly approves it). A `-p` session ends with its turn:
+  permission flags in `AM_CLAUDE_FLAGS`: `--permission-mode default`, in which a headless session is refused anything
+  not allowed, with `--allowedTools` rules for reading, the write roots (`Edit(<dir>/**)` covers writes too; the
+  launcher turns `{agent_dir}` into each worker's folder) and the harness commands. `acceptEdits` lets a worker write
+  anywhere in its working directories, and a shell rule that runs code the worker wrote bypasses every file rule, so
+  then the write roots hold only as far as the operating system enforces them; say so when proposing permissions.
+  `bypassPermissions` only if the user explicitly approves it. A `-p` session ends with its turn:
   a worker waits in the foreground and leaves no background job behind. By default a session also loads the user's
   personal instruction file, every instruction file in the directories above it, auto-memory, user plugins, skills
   and MCP listings, which can double a worker's fixed context and bring in unrelated rules; `CLAUDE.md` files in
@@ -18,7 +22,7 @@ from exposed tool choices or a verified model list; CLI `--model` accepts names 
   --strict-mcp-config --setting-sources project,local` and a `--settings` object with `claudeMdExcludes` for those
   files, the project's own at any depth included, and `autoMemoryEnabled: false`); `--bare` would do more but accepts
   only API-key authentication, not subscription logins.
-- **Waiting:** prefer phase sessions (`resources.md` §2), which end the session at a job boundary. Otherwise a
+- **Waiting:** prefer phase sessions (`detached.md`), which end the session at a job boundary. Otherwise a
   foreground command blocks for at most 10 min, so a worker's long wait is a harness command that blocks ≈ 9.5 min
   (with the tool timeout at the maximum) and reports the job's state, repeated. In the interactive session, a background command that
   returns when work is done (e.g. `worker_status.sh meta_m --wait <s>`) wakes the meta-agent with its completion
@@ -57,15 +61,25 @@ from exposed tool choices or a verified model list; CLI `--model` accepts names 
 
 ## Workers on another machine (optional)
 When evaluations run on a cluster, the launcher can run there as well, in a long scheduler job on a compute node, so
-workers submit and collect jobs directly and the meta-agent stays local. What it needs:
+workers submit and collect jobs directly, the meta-agent stays local and nothing depends on the user's machine. If the
+user's instructions, memory or an earlier project record a working setup, reuse it: verify it with one short job
+rather than setting it up again. Otherwise it needs:
+- The CLI installed on the cluster; compute nodes that reach the model API and, if workers submit, may submit jobs.
 - A tree holding only what workers need (code, data, brief), with no instruction files in or above it unless
   intended; check it matches the local copy before each launch.
 - A separate agent home (Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME`): no personal instructions, memory, skills or
   old sessions, and worker logs stay apart (`usage_report.py --home`). Log it in once, in a terminal rather than
   through an agent, and keep the credential owner-only: `claude setup-token`, then `CLAUDE_CODE_OAUTH_TOKEN` from that
   file in the job script; Codex `codex login` with `CODEX_HOME` set (`--device-auth` on a machine without a browser).
-- Keep the credential and the launcher job's scheduler variables out of jobs that workers submit. If the launcher job
-  can be requeued, its script releases `meta_m/.lock` on restart. Run process checks (`worker_status.sh`) on that node.
+- A job script that runs the launcher in the foreground (a backgrounded launcher would end with the job script).
+  Keep the credential and the launcher job's scheduler variables out of jobs that workers submit. A requeued job
+  starts on fresh processes: its script removes `meta_m/.lock` on restart (the lock records its host, so
+  `--reclaim` elsewhere refuses). Run `usage_report.py --home` where the worker home is.
+- One copy of the run state: while the launcher runs, the cluster tree's `meta_m/`, records, budget counter and
+  `tools/` are authoritative, and the local project keeps the plan, `CONTEXT.md` and harness source. Copy the run state
+  back (or review on the cluster) only after the launcher has ended, so that the two sides never write the same files.
+- Watching: run `worker_status.sh` on a login node of the same file system; everything but its process check works
+  there (that needs the launcher's node).
 
 ## Other frameworks
 Fill in the same fields with the user. Without parallel sub-agents, use detached workers if there is a

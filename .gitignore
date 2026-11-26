@@ -5,3 +5,7 @@ assets/*.xcf
 # Domain-specific references dropped in during a run (user-provided, not shipped)
 automodel/references/
 audit/
+
+# Local-only working material
+Panel_debates/
+automodel-development-workspace/

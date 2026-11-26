@@ -1,0 +1,7 @@
+{"time":"2026-11-20T19:12:05Z","meta":"meta_3","agent":1,"label":"a1","cli":"claude","model":"claude-opus-5-5","effort":"high","event":"start","rc":""}
+{"time":"2026-11-21T23:40:10Z","meta":"meta_3","agent":1,"label":"a5","cli":"claude","model":"claude-opus-5-5","effort":"high","event":"end","rc":"0"}
+{"time":"2026-11-21T23:52:30Z","meta":"meta_3","agent":1,"label":"summary","cli":"claude","model":"claude-opus-5-5","effort":"high","event":"end","rc":"0"}
+{"time":"2026-11-22T00:21:47Z","meta":"meta_3","agent":2,"label":"a3","cli":"claude","model":"claude-opus-5-5","effort":"high","event":"end","rc":"0"}
+{"time":"2026-11-22T01:03:51Z","meta":"meta_3","agent":2,"label":"a4","cli":"claude","model":"claude-opus-5-5","effort":"high","event":"end","rc":"0"}
+{"time":"2026-11-22T00:58:13Z","meta":"meta_3","agent":3,"label":"a3","cli":"claude","model":"claude-sonnet-5-5","effort":"medium","event":"end","rc":"0"}
+{"time":"2026-11-22T00:58:14Z","meta":"meta_3","agent":3,"label":"a4","cli":"claude","model":"claude-sonnet-5-5","effort":"medium","event":"start","rc":""}

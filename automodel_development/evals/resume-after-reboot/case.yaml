@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: resume-after-reboot
+expected_outcome: |
+  A walkthrough of resuming an interrupted detached-worker meta-iteration, ending before any new launch or submission.
+context:
+  scaffold_script: place-files.sh
