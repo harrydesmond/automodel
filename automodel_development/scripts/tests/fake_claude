@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 # Fake `claude -p` for launcher tests. FAKE_MODE: ok | limit (first $FAKE_LIMITS calls hit a usage limit) | phased
 # (an attempt's first session "submits a job": STATE.md + a running countdown read by the test's job_state.sh hook)
-# | stuck (every session ends without collecting its finished jobs).
+# | stuck (every session ends without collecting its finished jobs) | tokenlimit (sessions whose CLAUDE_CODE_OAUTH_TOKEN
+# is in FAKE_BAD hit a limit, the first FAKE_LIMITS times). FAKE_TOKENS: file receiving the token of each call.
 # FAKE_ARGS: file receiving the arguments of the last call; FAKE_PROMPTS: file receiving one line per call.
 p=$2
 [ -n "${FAKE_ARGS:-}" ] && printf '%s\n' "$@" > "$FAKE_ARGS"
 [ -n "${FAKE_PROMPTS:-}" ] && echo "$p" | tr "\n" " " >> "$FAKE_PROMPTS" && echo >> "$FAKE_PROMPTS"
+[ -n "${FAKE_TOKENS:-}" ] && echo "${CLAUDE_CODE_OAUTH_TOKEN:-none}" >> "$FAKE_TOKENS"
+if [ "${FAKE_MODE:-ok}" = tokenlimit ]; then     # sessions run with a token listed in FAKE_BAD hit a weekly limit
+  case " ${FAKE_BAD:-} " in *" ${CLAUDE_CODE_OAUTH_TOKEN:-none} "*)
+    c=${FAKE_COUNTER:?}; n=$(cat "$c" 2>/dev/null || echo 0); echo $((n+1)) > "$c"
+    [ "$n" -lt "${FAKE_LIMITS:-1000}" ] && { echo "You've hit your weekly limit · resets 6am (Europe/London)"; exit 1; } ;;
+  esac
+  sleep "${FAKE_SLEEP:-0}"
+fi
 if [ "${FAKE_MODE:-ok}" = limit ]; then
   c=${FAKE_COUNTER:?}; n=$(cat "$c" 2>/dev/null || echo 0); echo $((n+1)) > "$c"
   [ "$n" -lt "${FAKE_LIMITS:-0}" ] && { echo "API Error: You've hit your 5-hour limit · resets 6pm (error type rate_limit, HTTP 429)" >&2; exit 1; }

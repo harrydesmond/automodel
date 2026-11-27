@@ -113,6 +113,22 @@ check "usage limit: zero waiting budget falls back to the retry cap" '[ "$rc" = 
 csetup; t0=$(date +%s); rc=$(FAKE_MODE=limit FAKE_LIMITS=1000 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=1 AM_STOP_AT="@$(( t0 + 3 ))" run 1); dt=$(( $(date +%s) - t0 ))
 check "deadline ends a usage-limit wait (exit 3) and leaves STOP for harness and workers" '[ "$rc" = 3 ] && [ "$dt" -le 10 ] && grep -q "STOP or deadline" meta_1/agent_1/sessions.log && [ -f meta_1/STOP ]'
 setup; rc=$(AM_STOP_AT="1 hour" run); check "a launcher that finishes before its deadline leaves no STOP behind" '[ "$rc" = 0 ] && [ ! -f meta_1/STOP ]'
+# several accounts (AM_CLAUDE_TOKENS): preference order, failover on a limit, return to the first, no token in logs
+tsetup() { csetup; mkdir -p "$T/tok"; echo tokA > "$T/tok/a"; echo tokB > "$T/tok/b"; chmod 600 "$T/tok/a" "$T/tok/b"; rm -f "$T/toks"
+  export AM_CLAUDE_TOKENS="$T/tok/a:$T/tok/b"; }
+tsetup; rc=$(FAKE_MODE=tokenlimit FAKE_BAD=tokZ FAKE_TOKENS=$T/toks run 1)
+check "tokens: the first listed token is used while it has usage" '[ "$rc" = 0 ] && ! grep -qv tokA "$T/toks"'
+tsetup; t0=$(date +%s); rc=$(FAKE_MODE=tokenlimit FAKE_BAD=tokA FAKE_COUNTER=$T/cnt FAKE_TOKENS=$T/toks AM_LIMIT_WAIT=600 AM_MAX_TRIES=1 run 1); dt=$(( $(date +%s) - t0 ))
+check "tokens: a limit on the first moves on at once to the next (no wait, no retry spent)" '[ "$rc" = 0 ] && [ "$dt" -lt 30 ] && [ "$(head -2 "$T/toks" | tr "\n" " ")" = "tokA tokB " ] && grep -q "continuing with token 2" meta_1/agent_1/sessions.log'
+check "tokens: the mark is shared, so later sessions skip the limited token" '[ "$(tail -n +2 "$T/toks" | grep -c tokA)" = 0 ]'
+check "tokens: no token text in logs or manifest" '! grep -rq "tokA\|tokB" meta_1/agent_1/sessions.log meta_1/launch_manifest.jsonl meta_1/launch.log'
+tsetup; rc=$(FAKE_MODE=tokenlimit FAKE_BAD=tokA FAKE_LIMITS=1 FAKE_COUNTER=$T/cnt FAKE_TOKENS=$T/toks FAKE_SLEEP=2 AM_LIMIT_WAIT=1 AM_MAX_TRIES=1 run 1)
+check "tokens: an expired mark returns sessions to the first token" '[ "$rc" = 0 ] && [ "$(tr "\n" " " < "$T/toks")" = "tokA tokB tokA " ]'
+tsetup; rc=$(FAKE_MODE=tokenlimit FAKE_BAD="tokA tokB" FAKE_LIMITS=3 FAKE_COUNTER=$T/cnt FAKE_TOKENS=$T/toks AM_LIMIT_WAIT=1 AM_MAX_TRIES=1 run 1)
+check "tokens: with every token limited the agent waits, then finishes" '[ "$rc" = 0 ] && grep -q "every token marked limited" meta_1/agent_1/sessions.log'
+tsetup; rm "$T/tok/a"; rc=$(FAKE_MODE=tokenlimit FAKE_BAD=tokZ FAKE_TOKENS=$T/toks run 1)
+check "tokens: a missing token file is skipped" '[ "$rc" = 0 ] && ! grep -qv tokB "$T/toks"'
+unset AM_CLAUDE_TOKENS
 csetup; printf '#!/bin/sh\nf="$1/.running"; [ -f "$f" ] || exit 2\nn=$(cat "$f"); if [ "$n" -gt 0 ]; then echo $((n-1)) > "$f"; exit 0; fi; rm -f "$f"; exit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
 rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_JOB_POLL=0 AM_MAX_TRIES=1 run 1)
 check "phase sessions: end at a job, resume when it finishes, no retry spent" '[ "$rc" = 0 ] && [ -f meta_1/agent_1/attempt_1/result.json ] && grep -q "resumes after jobs" meta_1/agent_1/sessions.log'

@@ -31,6 +31,13 @@
 # Usage/rate limits: a session that stops on one spends no retry; the agent waits AM_LIMIT_WAIT s and tries again, for up
 #   to AM_LIMIT_MAX_H hours in total, so a run resumes by itself after the limit window resets. AM_STOP_AT ends such
 #   waits too: no session starts after the deadline.
+# Several accounts (cli=claude): AM_CLAUDE_TOKENS, a colon-separated list of files each holding one long-lived token
+#   (owner-only), in order of preference. Each session reads the first listed file that exists and is not marked
+#   limited and passes it as CLAUDE_CODE_OAUTH_TOKEN (never logged; sessions.log names the token's position only). A
+#   session stopped by a usage/rate limit marks its token for AM_LIMIT_WAIT s, shared by all agents, and the agent goes
+#   on at once with the next unmarked token; with every token marked it waits for the earliest mark to expire. Marks
+#   expire, so later sessions return to an earlier token once it has usage again. Files are read at each session, so
+#   a token can be added or replaced without a restart. Unset or unreadable: the inherited login.
 # Ownership: an atomic lock directory <meta_dir>/.lock (launcher PID, one process group per agent). Workers run in their
 #   own process groups; on TERM/INT the launcher stops those groups and releases the lock only once none survives
 #   (otherwise the lock stays and failed.log says so). Scheduler jobs are not cancelled by this: harvest or cancel them
@@ -53,6 +60,7 @@ ROOT=$PWD; RETRY_WAIT=${AM_RETRY_WAIT:-1800}; MAX_TRIES=${AM_MAX_TRIES:-8}; STAG
 LIMIT_WAIT=${AM_LIMIT_WAIT:-1200}; LIMIT_MAX=$(( ${AM_LIMIT_MAX_H:-192} * 3600 ))
 JOB_POLL=${AM_JOB_POLL:-120}; JOB_MAX=$(( ${AM_JOB_WAIT_MAX_H:-72} * 3600 )); MAX_PHASES=${AM_MAX_PHASES:-20}
 MANIFEST=$META/launch_manifest.jsonl
+TOKENS=(); [ -n "${AM_CLAUDE_TOKENS:-}" ] && IFS=: read -r -a TOKENS <<< "$AM_CLAUDE_TOKENS"
 STOP_AT=""; if [ -n "${AM_STOP_AT:-}" ]; then STOP_AT=$(date -d "$AM_STOP_AT" +%s 2>/dev/null) || { echo "AM_STOP_AT: unreadable date '$AM_STOP_AT'" >&2; exit 1; }; fi
 stopped() { [ -f "$META/STOP" ] || { [ -n "$STOP_AT" ] && [ "$(date +%s)" -ge "$STOP_AT" ]; }; }   # STOP file or deadline
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
@@ -164,7 +172,8 @@ run_session() {  # agent, label, prompt
         codex) codex exec -m "${MODEL[$s]}" ${EFFORT[$s]:+-c "model_reasoning_effort=\"${EFFORT[$s]}\""} \
                    "${XF[@]}" "${CISO[@]}" --skip-git-repo-check -C "$ROOT" -o "$d/.reply_$lab.md" "$p" \
                    < /dev/null >> "$d/session_$lab.log" 2>&1 ;;
-        claude) claude -p "$p" --model "${MODEL[$s]}" ${EFFORT[$s]:+--effort "${EFFORT[$s]}"} "${CF[@]//\{agent_dir\}/$d}" "${ISO[@]}" \
+        claude) claude_tok "$( [ "${TI:--2}" -ge 0 ] && cat "${TOKENS[$TI]}" 2>/dev/null)" \
+                   -p "$p" --model "${MODEL[$s]}" ${EFFORT[$s]:+--effort "${EFFORT[$s]}"} "${CF[@]//\{agent_dir\}/$d}" "${ISO[@]}" \
                    < /dev/null > "$d/.reply_$lab.md" 2>> "$d/session_$lab.log" ;;
     esac
     rc=$?
@@ -173,6 +182,33 @@ run_session() {  # agent, label, prompt
     fi
     log "$s" "$lab session exit $rc"; manifest "$s" "$lab" end "$rc"
     return $rc
+}
+
+token_pick() {  # index of the first readable token file not marked limited; -1 all marked; -2 none listed or readable
+    local i u now n=0; now=$(date +%s)
+    for i in "${!TOKENS[@]}"; do
+        [ -s "${TOKENS[$i]}" ] || continue; n=$(( n + 1 ))
+        u=$(cat "$META/.tokens/$i" 2>/dev/null); [ "$now" -ge "${u:-0}" ] 2>/dev/null && { echo "$i"; return 0; }
+    done
+    [ "$n" -eq 0 ] && echo -2 || echo -1
+}
+
+token_mark() {  # index: marked limited for LIMIT_WAIT s, for every agent of this meta-iteration
+    mkdir -p "$META/.tokens" && echo $(( $(date +%s) + LIMIT_WAIT )) > "$META/.tokens/$1.$BASHPID" &&
+        mv -f "$META/.tokens/$1.$BASHPID" "$META/.tokens/$1"
+}
+
+token_wait() {  # seconds until the earliest mark expires (1 to LIMIT_WAIT)
+    local i u w=$LIMIT_WAIT now; now=$(date +%s)
+    for i in "${!TOKENS[@]}"; do
+        u=$(cat "$META/.tokens/$i" 2>/dev/null) || continue; [ $(( u - now )) -lt "$w" ] && w=$(( u - now ))
+    done
+    [ "$w" -lt 1 ] && w=1; echo "$w"
+}
+
+claude_tok() {  # token (may be empty) then claude's arguments: the token goes to claude's environment, not its argv
+    local t=$1; shift
+    if [ -n "$t" ]; then CLAUDE_CODE_OAUTH_TOKEN=$t command claude "$@"; else command claude "$@"; fi
 }
 
 limit_hit() {  # agent, label, log offset, rc: did this session stop on a usage or rate limit?
@@ -185,15 +221,31 @@ limit_hit() {  # agent, label, log offset, rc: did this session stop on a usage 
 }
 
 session_until() {  # agent, label, done-test, prompt[, resume prompt, attempt dir]: 0 done, 1 failed, 3 stopped
-    local s=$1 lab=$2 test=$3 p=$4 rp=${5:-} a=${6:-} t=1 rc t0 off lf waited=0 phases=0 jw st q unc=0
+    local s=$1 lab=$2 test=$3 p=$4 rp=${5:-} a=${6:-} t=1 rc t0 off lf waited=0 phases=0 jw st q unc=0 w nt lti=-2
     while [ "$t" -le "$MAX_TRIES" ]; do
         eval "$test" && return 0
         stopped && { log "$s" "$lab not started: STOP or deadline"; return 3; }
+        TI=-2
+        if [ "${#TOKENS[@]}" -gt 0 ] && [ "${CLI[$s]}" = claude ]; then                       # several accounts
+            TI=$(token_pick)
+            if [ "$TI" -eq -1 ] && [ "$waited" -lt "$LIMIT_MAX" ]; then
+                w=$(token_wait); log "$s" "$lab: every token marked limited; waiting ${w}s"
+                sleep "$w"; waited=$(( waited + w )); continue
+            fi
+            [ "$TI" -eq -1 ] && TI=0
+            [ "$TI" != "$lti" ] && [ "$TI" -ge 0 ] && log "$s" "$lab uses token $(( TI + 1 )) of ${#TOKENS[@]}"; lti=$TI
+        fi
         lf=$META/agent_$s/session_$lab.log; off=$(stat -c %s "$lf" 2>/dev/null || echo 0); t0=$(date +%s)
         q=$p; [ -n "$rp" ] && [ -f "$a/STATE.md" ] && q=$rp
         run_session "$s" "$lab" "$q"; rc=$?; st=2
         eval "$test" && return 0
         if limit_hit "$s" "$lab" "$off" "$rc" && [ "$waited" -lt "$LIMIT_MAX" ]; then          # no retry spent
+            if [ "$TI" -ge 0 ]; then                                                          # mark it, try the next
+                token_mark "$TI"; nt=$(token_pick)
+                [ "$nt" -ge 0 ] && { log "$s" "$lab stopped by a usage/rate limit on token $(( TI + 1 )); continuing with token $(( nt + 1 ))"; continue; }
+                w=$(token_wait); log "$s" "$lab stopped by a usage/rate limit on token $(( TI + 1 )); every token marked limited; waiting ${w}s"
+                sleep "$w"; waited=$(( waited + w )); continue
+            fi
             log "$s" "$lab stopped by a usage/rate limit; waiting ${LIMIT_WAIT}s"
             sleep "$LIMIT_WAIT"; waited=$(( waited + LIMIT_WAIT )); continue
         fi
@@ -270,8 +322,8 @@ if [ -n "$STOP_AT" ]; then   # at the deadline, create STOP so that the harness 
       [ "$w" -gt 0 ] && { sleep "$w" & wait $!; }; touch "$META/STOP"
       echo "$(date '+%F %T') deadline reached: created $META/STOP" ) & TIMER=$!
 fi
-BOOT="$(declare -p META ROOT STOP_AT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO CISO CF XF MANIFEST CLI MODEL EFFORT NATT)
-$(declare -f stopped log manifest fail run_session limit_hit session_until agent_loop)"
+BOOT="$(declare -p META ROOT STOP_AT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO CISO CF XF MANIFEST CLI MODEL EFFORT NATT TOKENS)
+$(declare -f stopped log manifest fail run_session token_pick token_mark token_wait claude_tok limit_hit session_until agent_loop)"
 for s in $AGENTS; do
     setsid bash -c "$BOOT"$'\n''agent_loop "$1"' automodel-worker "$s" &
     PIDS="$PIDS $!"; echo "$!" >> "$LOCK/groups"; sleep "$STAGGER"

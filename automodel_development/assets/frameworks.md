@@ -71,6 +71,9 @@ rather than setting it up again. Otherwise it needs:
   old sessions, and worker logs stay apart (`usage_report.py --home`). Log it in once, in a terminal rather than
   through an agent, and keep the credential owner-only: `claude setup-token`, then `CLAUDE_CODE_OAUTH_TOKEN` from that
   file in the job script; Codex `codex login` with `CODEX_HOME` set (`--device-auth` on a machine without a browser).
+  Several Claude accounts, where their terms allow one workload across them: one token file each, listed in order of
+  preference in `AM_CLAUDE_TOKENS`; workers move to the next on a usage limit and return to the first once it has usage
+  again (`launch_workers.sh` header).
 - A job script that runs the launcher in the foreground (a backgrounded launcher would end with the job script).
   Keep the credential and the launcher job's scheduler variables out of jobs that workers submit. A requeued job
   starts on fresh processes: its script removes `meta_m/.lock` on restart (the lock records its host, so
