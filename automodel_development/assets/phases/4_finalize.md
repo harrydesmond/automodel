@@ -8,17 +8,19 @@ description: Fourth and final phase. Validate and freeze authorised finalists, a
 # Phase 4 — Finalize
 
 ## 1. Validate and freeze
-All final work uses the agreed remaining or reserved allowance and obeys the latest stop instruction. If no eligible
-candidate exists, record that without another fit. Unused reserves stay sealed.
+All final work uses the plan's reserve (what consolidation left of it) and obeys the latest stop instruction. If no
+eligible candidate exists, record that without another fit; reserved data then stay sealed.
 
-For authorised finalists, exercise the acceptance driver and deployed interface on development data, including
+For the finalists the user chose, exercise the script that applies the acceptance checks and the interface through
+which the model will be used, on development data, including
 relevant branches and boundaries. Record failures; repair only within scope, then revalidate and freeze the model,
 fitted state and evaluation dependencies (the model tested must be the model selected). Verify their identities when evaluating or reporting. For heavy searches,
 generate the gate decision from complete records; missing, non-finite or insufficient coverage cannot pass.
 
 ## 2. External check, if agreed
 Before opening reserved evidence, record candidates, baseline, decision rule and claims in version control and have
-the user approve this pre-registration (approving the external check at setup does not cover it). Check a
+the user approve this pre-registration (approving the external check at setup does not cover it: candidates and
+claims must be fixed after the search and before anyone sees the reserved data, or they can be chosen to fit it). Check a
 clean checkout can recover the approved inputs and run the checks, using tracked files or documented immutable assets.
 Apply the pre-registered check and report all agreed metrics.
 

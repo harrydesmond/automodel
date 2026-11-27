@@ -43,7 +43,7 @@ sub-agents.
   the user's review if the plan says so (default: light searches continue, heavy searches pause). A stop request takes
   effect before any further submission: create `STOP` in the active `meta_m/`, which the launcher and harness check.
 - **Checkpoint your own context.** At each phase boundary and after each meta-iteration review, update `CONTEXT.md`
-  so a fresh session can resume. At a pause the plan already has, or once your context is large, also ask the user to
+  so a fresh session can resume, and tick `CHECKLIST.md`. At a pause the plan already has, or once your context is large, also ask the user to
   compact or to resume in a fresh session: the orchestrator's context is re-read on every call.
 
 ## Supporting files
@@ -56,6 +56,6 @@ sub-agents.
 - `<skill>/scripts/`: `launch_workers.sh` (detached workers, run from the project root: phase sessions at job
   boundaries, usage-limit waits, isolated workers) and `worker_status.sh`,
   `usage_report.py` (token usage from local session logs), `tests/run_tests.sh` (their fixture tests).
-- `TIPS.md`: optional practices (uncertainty, reference models).
+- `TIPS.md`: practices for uncertainty and reference models; Phases 1 and 3 say when to read it.
 - References: the user may put papers, code or earlier results in the project's `references/` folder (never in this
   skill's folder, which every project shares); phases say when to read them.

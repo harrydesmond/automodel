@@ -72,7 +72,7 @@ cost of each unit of complexity. In-session, launch fresh sub-agents for each ro
   calls and context that drove them.
 - **Re-orient** before choosing directions, in `review.md`: what the results, failures included, imply about the
   mechanism and which families are now less plausible; whether gains are structural or come from added flexibility
-  (use matched parent refits and, where relevant, matched-complexity controls); remaining systematic residuals; whether the variables or representation should
+  (`TIPS.md`, uncertainty, for comparing candidates; use matched parent refits and, where relevant, matched-complexity controls); remaining systematic residuals; whether the variables or representation should
   change; which experiment would be most informative next. Distinguish incremental refinements from fundamental changes.
 - **Re-plan** (`resources.md` §7) and apply the stop rule. Use a fresh reviewer (new session or another framework)
   when the data, evaluator or protocol changed, a result is disputed, or the stakes warrant it.
@@ -87,11 +87,13 @@ otherwise continue unless the stop rule fires, M or the budget is reached, or th
 request applies before any new submission; work already finished is kept and reported as such.
 
 ## Ending the search
-Within the authorised remaining or reserved allowance, consolidate (refit and recombine the front, on the full
-training data if the search used a subsample) and diagnose the largest remaining errors, comparing them with the
+Within the plan's reserve and any search budget left, consolidate (refit and recombine the front, on the full
+training data if the search used a subsample), refit the references used in the final comparison with the same
+convergence protocol (`checks.md`), so that gains are not measured against under-converged fits, and diagnose the largest remaining errors, comparing them with the
 target's own uncertainty to set priorities, not to change the target. Then present the finalists to the user under the
 approved rule with every gate value and trade-off and, for any required gate no finalist meets, the options (continue
-work, change the requirement, or no eligible result); a change to the rule or gates needs approval, is a new protocol
+work, change the requirement, or no eligible result), and ask the user to choose the finalists that go on to Phase 4;
+a change to the rule or gates needs approval, is a new protocol
 version, and the original result is still reported.
 
 Present the best score per meta-iteration (plot), the changes that drove it, and the usage, time and compute spent, with

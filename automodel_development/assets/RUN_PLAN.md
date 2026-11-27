@@ -12,7 +12,7 @@
 3. **Evaluation:** <evaluator; references; fit settings; external check or "none: exploratory, no independent check">
    **Requirements and checks:** <each requirement a hard gate / in the score / reported only; complexity limits;
    checks adopted, "N/A because …" for the rest>
-4. **Work:** <fit cap and elapsed-time cap; initial M, S, I; stop rule; where computation runs>
+4. **Work:** <fit cap and elapsed-time cap, with a reserve for the end of the search; initial M, S, I; stop rule; where computation runs>
 5. **Authority and progress:** <what you may change without asking; pause between meta-iterations (default off)>
 
 ## Heavy search
@@ -26,7 +26,8 @@
 6. **External evidence:** <reserved data and how it is locked; prior exposure (e.g. reference benchmarking, sibling
    runs on the same pool); what may be refitted at the final check; fresh-evidence access for later claims; or none, with what that leaves unpriced>
 7. **Evaluation budget:** <screens and scored fits per attempt; run-wide fit, wall-time and compute caps, counting
-   baselines, failures, refits and recombinations; seeds/restarts per stage>. **Token budget** (guide, not enforced):
+   baselines, failures, refits and recombinations; seeds/restarts per stage; a reserve for consolidation, reference
+   refits and the final checks, kept out of the search budget>. **Token budget** (guide, not enforced):
    <per meta-iteration; reported against actual after each one>
 8. **References:** <which, at which settings; expected time>
 9. **Execution:** <where computation runs; worker permissions (write roots, network, compute) if detached; where the
@@ -42,7 +43,7 @@
 15. **Models and effort:** <meta-agent; sub-agents; alternatives offered>
 16. **Estimate from calibration:** <usage, wall time, compute>
 17. **Progress and pauses:** <update cadence; pause between meta-iterations (default on); for unattended periods, the
-    work queued, the idle time the user accepted, and the deadline (`AM_STOP_AT`)>
+    work queued and the idle time the user accepted>
 18. **Delegated changes:** <e.g. directions, seeds, S and I within the budget; anything else needs approval>
 
 ## Approvals and changes

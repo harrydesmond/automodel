@@ -42,8 +42,6 @@ setup; rc=$(FAKE_MODE=flaky FAKE_COUNTER=$T/cnt run 1); check "transient failure
 setup; printf '#!/bin/sh\nexit 17\n' > meta_1/after_agent.sh; chmod +x meta_1/after_agent.sh; rc=$(run)
 check "failing after_agent hook fails the run" '[ "$rc" = 1 ] && grep -q "after_agent.sh exit 17" meta_1/failed.log'
 setup; touch meta_1/STOP; rc=$(run); check "STOP: nothing starts, exit 3" '[ "$rc" = 3 ] && [ ! -d meta_1/agent_1/attempt_1 ]'
-setup; rc=$(AM_STOP_AT="1 hour ago" run); check "past deadline: nothing starts, exit 3" '[ "$rc" = 3 ] && [ ! -d meta_1/agent_1/attempt_1 ] && grep -q deadline meta_1/launch.log'
-setup; rc=$(AM_STOP_AT="not a date" run); check "unreadable deadline is refused" '[ "$rc" = 1 ] && grep -q "unreadable date" meta_1/launch.log'
 setup; FAKE_MODE=hang bash "$S/launch_workers.sh" meta_1 > meta_1/launch.log 2>&1 & L=$!; sleep 2
 check "second launcher refused while one runs" '[ "$(run)" = 1 ]'
 kill -TERM $L; wait $L 2>/dev/null; sleep 1
@@ -110,9 +108,6 @@ csetup; rc=$(FAKE_MODE=limit FAKE_LIMITS=4 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=0 A
 check "usage limit: waits without spending retries, then finishes" '[ "$rc" = 0 ] && [ "$(grep -c "usage/rate limit" meta_1/agent_1/sessions.log)" = 4 ]'
 csetup; rc=$(FAKE_MODE=limit FAKE_LIMITS=4 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=0 AM_LIMIT_MAX_H=0 AM_MAX_TRIES=1 run 1)
 check "usage limit: zero waiting budget falls back to the retry cap" '[ "$rc" = 1 ]'
-csetup; t0=$(date +%s); rc=$(FAKE_MODE=limit FAKE_LIMITS=1000 FAKE_COUNTER=$T/cnt AM_LIMIT_WAIT=1 AM_STOP_AT="@$(( t0 + 3 ))" run 1); dt=$(( $(date +%s) - t0 ))
-check "deadline ends a usage-limit wait (exit 3) and leaves STOP for harness and workers" '[ "$rc" = 3 ] && [ "$dt" -le 10 ] && grep -q "STOP or deadline" meta_1/agent_1/sessions.log && [ -f meta_1/STOP ]'
-setup; rc=$(AM_STOP_AT="1 hour" run); check "a launcher that finishes before its deadline leaves no STOP behind" '[ "$rc" = 0 ] && [ ! -f meta_1/STOP ]'
 # several accounts (AM_CLAUDE_TOKENS): preference order, failover on a limit, return to the first, no token in logs
 tsetup() { csetup; mkdir -p "$T/tok"; echo tokA > "$T/tok/a"; echo tokB > "$T/tok/b"; chmod 600 "$T/tok/a" "$T/tok/b"; rm -f "$T/toks"
   export AM_CLAUDE_TOKENS="$T/tok/a:$T/tok/b"; }

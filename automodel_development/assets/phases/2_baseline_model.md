@@ -24,7 +24,7 @@ phase relies on it; give each part a test.
 - **A failure command** that records what the harness cannot detect itself (e.g. a lost job) with its reason: agents
   never write records or results by hand, so every number traces to a fit.
 - **One budget counter**, shared by parallel agents and hooks (e.g. under a lock file), that refuses work beyond the
-  plan's budget and new submissions once `STOP` exists in the active `meta_m/` or the project root: a limit that
+  plan's search budget (the reserve opens at consolidation) and new submissions once `STOP` exists in the active `meta_m/` or the project root: a limit that
   depends on each agent's restraint does not hold.
 - **A shared toolkit** of the analyses agents would otherwise each write: evaluation at fixed constants, residual
   breakdowns, per-gate diagnostics (which component fails and by how much), oracle floors and, where the model family
@@ -55,8 +55,9 @@ pairwise approximate-equality sort: "within 1 nat" is not transitive. For a modi
 the baseline; for a replacement structure, run a reference-output smoke test. Keep these as runnable tests.
 
 ## 3. End-to-end pilot
-Use a sub-agent (or this session, if sub-agents are unavailable) to run the full pipeline on one or two models at
-default settings, through the execution path the search will use (local, cluster, detached workers): fit, predict,
+Run the full pipeline on one or two models at default settings through the execution path the search will use: for
+detached workers a one-agent, one-attempt launcher run (`meta_0`), which also measures a worker session's usage;
+otherwise a sub-agent (or this session, if sub-agents are unavailable): fit, predict,
 record, card, validator; for heavy searches also job submission, waiting, the `.job` marker and harvesting after an
 interruption and with one output missing or truncated. Record the time and compute of one evaluation and the pilot's wall time (heavy: its model, effort and
 usage), and revisit the light/heavy classification if they differ from Phase 1's estimate. The pilot also checks the
@@ -67,7 +68,7 @@ from the data.
 
 ## 4. References and baseline
 Score the plan's references and the baseline at default settings; refit deeply (more starts, new seeds) only those
-that will be incumbents. If this will take much longer than the plan said, tell the user before running it. Profile
+that will be incumbents; references used in the final comparison get the same refits at the end of the search. If this will take much longer than the plan said, tell the user before running it. Profile
 where the baseline fails (by region, group or regime) and how much error comes from any component that stays fixed.
 
 ## 5. Calibration and approval (heavy)

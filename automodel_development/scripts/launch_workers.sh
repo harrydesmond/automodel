@@ -7,7 +7,6 @@
 #   setsid nohup <skill>/scripts/launch_workers.sh meta_3 >> meta_3/launch.log 2>&1 < /dev/null &
 #   <skill>/scripts/launch_workers.sh meta_3 2 5          # only agents 2 and 5 (when no launcher runs on meta_3)
 #   touch meta_3/STOP                                     # no new session or hook starts; running ones finish
-#   AM_STOP_AT='2026-11-30 07:00' setsid nohup ...       # creates meta_3/STOP at that time (deadline for unattended runs)
 #   <skill>/scripts/launch_workers.sh --reclaim meta_3    # after a crash: release the lock once no worker survives
 # Run from the project root. Required in <meta_dir>:
 #   agents.conf      one line per agent: <s> <cli: codex|claude> <model> [effort or -] [attempts]   (# comments allowed)
@@ -29,8 +28,7 @@
 #   features) and memories off; its personal AGENTS.md and user skills live in CODEX_HOME, so point CODEX_HOME at a
 #   separate, logged-in home to drop them too. Login is unaffected.
 # Usage/rate limits: a session that stops on one spends no retry; the agent waits AM_LIMIT_WAIT s and tries again, for up
-#   to AM_LIMIT_MAX_H hours in total, so a run resumes by itself after the limit window resets. AM_STOP_AT ends such
-#   waits too: no session starts after the deadline.
+#   to AM_LIMIT_MAX_H hours in total, so a run resumes by itself after the limit window resets.
 # Several accounts (cli=claude): AM_CLAUDE_TOKENS, a colon-separated list of files each holding one long-lived token
 #   (owner-only), in order of preference. Each session reads the first listed file that exists and is not marked
 #   limited and passes it as CLAUDE_CODE_OAUTH_TOKEN (never logged; sessions.log names the token's position only). A
@@ -61,8 +59,6 @@ LIMIT_WAIT=${AM_LIMIT_WAIT:-1200}; LIMIT_MAX=$(( ${AM_LIMIT_MAX_H:-192} * 3600 )
 JOB_POLL=${AM_JOB_POLL:-120}; JOB_MAX=$(( ${AM_JOB_WAIT_MAX_H:-72} * 3600 )); MAX_PHASES=${AM_MAX_PHASES:-20}
 MANIFEST=$META/launch_manifest.jsonl
 TOKENS=(); [ -n "${AM_CLAUDE_TOKENS:-}" ] && IFS=: read -r -a TOKENS <<< "$AM_CLAUDE_TOKENS"
-STOP_AT=""; if [ -n "${AM_STOP_AT:-}" ]; then STOP_AT=$(date -d "$AM_STOP_AT" +%s 2>/dev/null) || { echo "AM_STOP_AT: unreadable date '$AM_STOP_AT'" >&2; exit 1; }; fi
-stopped() { [ -f "$META/STOP" ] || { [ -n "$STOP_AT" ] && [ "$(date +%s)" -ge "$STOP_AT" ]; }; }   # STOP file or deadline
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 LOCK=$META/.lock
 groups_alive() { local g; for g in $(cat "$LOCK/groups" 2>/dev/null); do kill -0 -- "-$g" 2>/dev/null && echo "$g"; done; }
@@ -146,10 +142,8 @@ release() {  # stop recorded worker groups (if asked), then release the lock onl
     fi
     rm -rf "$LOCK"
 }
-TIMER=""
 cleanup() {
     trap '' TERM INT
-    [ -n "$TIMER" ] && kill "$TIMER" 2>/dev/null
     echo "$(date '+%F %T') launcher interrupted" >> "$META/failed.log"
     release "TERM KILL"; exit 1
 }
@@ -224,7 +218,7 @@ session_until() {  # agent, label, done-test, prompt[, resume prompt, attempt di
     local s=$1 lab=$2 test=$3 p=$4 rp=${5:-} a=${6:-} t=1 rc t0 off lf waited=0 phases=0 jw st q unc=0 w nt lti=-2
     while [ "$t" -le "$MAX_TRIES" ]; do
         eval "$test" && return 0
-        stopped && { log "$s" "$lab not started: STOP or deadline"; return 3; }
+        [ -f "$META/STOP" ] && { log "$s" "$lab not started: STOP"; return 3; }
         TI=-2
         if [ "${#TOKENS[@]}" -gt 0 ] && [ "${CLI[$s]}" = claude ]; then                       # several accounts
             TI=$(token_pick)
@@ -253,7 +247,7 @@ session_until() {  # agent, label, done-test, prompt[, resume prompt, attempt di
             jw=0; "$JOBHOOK" "$a" >/dev/null 2>&1; st=$?
             [ "$st" -eq 0 ] && log "$s" "$lab waiting for jobs of $a"
             while [ "$st" -eq 0 ] && [ "$jw" -lt "$JOB_MAX" ]; do
-                stopped && { log "$s" "$lab: STOP or deadline while jobs run; not resuming"; return 3; }
+                [ -f "$META/STOP" ] && { log "$s" "$lab: STOP while jobs run; not resuming"; return 3; }
                 sleep "$JOB_POLL"; jw=$(( jw + JOB_POLL )); "$JOBHOOK" "$a" >/dev/null 2>&1; st=$?
             done
             if [ "$st" -eq 1 ] && [ "$jw" -eq 0 ]; then unc=$(( unc + 1 )); else unc=0; fi   # ended with results uncollected
@@ -305,7 +299,7 @@ project directory $ROOT. All $n attempts in $d are finished. Read $META/COMMON_P
 $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.md. No new evaluations."
     rc=$?; [ $rc -ne 0 ] && return $rc
     if [ -x "$META/after_agent.sh" ] && [ ! -f "$d/.after_agent.done" ]; then
-        stopped && { log "$s" "after_agent.sh not started: STOP or deadline"; return 3; }
+        [ -f "$META/STOP" ] && { log "$s" "after_agent.sh not started: STOP"; return 3; }
         "$META/after_agent.sh" "$d" >> "$d/after_agent.log" 2>&1; rc=$?
         log "$s" "after_agent.sh exit $rc"
         [ $rc -eq 0 ] || { fail "$s" "after_agent.sh exit $rc"; return 1; }
@@ -314,16 +308,11 @@ $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.m
     log "$s" "finished"
 }
 
-echo "$(date '+%F %T') launching agents: $AGENTS$([ -n "$STOP_AT" ] && echo "; deadline $(date -d "@$STOP_AT" '+%F %T')")"
+echo "$(date '+%F %T') launching agents: $AGENTS"
 rm -f "$META/failed.log"
 set +m
-if [ -n "$STOP_AT" ]; then   # at the deadline, create STOP so that the harness and running workers see it too
-    ( trap 'kill $! 2>/dev/null; exit 0' TERM; w=$(( STOP_AT - $(date +%s) ))   # killing the timer stops its sleep
-      [ "$w" -gt 0 ] && { sleep "$w" & wait $!; }; touch "$META/STOP"
-      echo "$(date '+%F %T') deadline reached: created $META/STOP" ) & TIMER=$!
-fi
-BOOT="$(declare -p META ROOT STOP_AT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO CISO CF XF MANIFEST CLI MODEL EFFORT NATT TOKENS)
-$(declare -f stopped log manifest fail run_session token_pick token_mark token_wait claude_tok limit_hit session_until agent_loop)"
+BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO CISO CF XF MANIFEST CLI MODEL EFFORT NATT TOKENS)
+$(declare -f log manifest fail run_session token_pick token_mark token_wait claude_tok limit_hit session_until agent_loop)"
 for s in $AGENTS; do
     setsid bash -c "$BOOT"$'\n''agent_loop "$1"' automodel-worker "$s" &
     PIDS="$PIDS $!"; echo "$!" >> "$LOCK/groups"; sleep "$STAGGER"
@@ -332,10 +321,9 @@ status=0
 for p in $PIDS; do wait "$p"; rc=$?; [ $rc -gt $status ] && status=$rc; done
 [ -s "$META/failed.log" ] && status=1
 release "" || status=1
-[ -n "$TIMER" ] && kill "$TIMER" 2>/dev/null
 case $status in
     0) echo "$(date '+%F %T') $META: all agents finished; start the review" ;;
-    3) echo "$(date '+%F %T') $META: stopped by $META/STOP or the AM_STOP_AT deadline; completed attempts are kept" ;;
+    3) echo "$(date '+%F %T') $META: stopped by $META/STOP; completed attempts are kept" ;;
     *) echo "$(date '+%F %T') $META: agents stopped with failures:"; cat "$META/failed.log"; status=1 ;;
 esac
 exit $status

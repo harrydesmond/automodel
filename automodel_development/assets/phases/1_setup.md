@@ -31,7 +31,7 @@ what the final claims will cover. Check the project's `references/` folder.
 ## 2. Existing code and data
 Review existing code with the user and decide what to reuse. Identify the data files, input and output variables,
 cleaning needs, groups (subjects, sites, datasets) and every other dataset available (keep independent ones for
-replication).
+replication). Choose the reference models to compare against (`TIPS.md`, references).
 
 ## 3. Objective
 - **Training loss** and **reported metrics**; always include runtime and memory per evaluation.
@@ -57,6 +57,9 @@ replication).
   ranked or rejected under it (compute its score if an evaluation takes seconds), and say which known references the
   gates exclude (e.g. "the best published form is ineligible under this rule"). Changes to this rule later are
   protocol changes (new version, rescoring).
+- A constant of the rule that depends on score noise (a tie tolerance, a replacement margin; `TIPS.md`, uncertainty)
+  can often be measured only in Phase 2: approve the method now, then fix the value in `RUN_PLAN.md` before any
+  candidate is scored. That completes the approved rule; it is not a protocol change.
 
 ## 4. Splits and external evidence
 - Create the data files the score needs, if any (`train.X`, `validation.X` or folds); guard against leakage (repeat
@@ -74,7 +77,10 @@ Implement or confirm a parameter optimizer (prefer libraries), with seeds, resta
 
 ## 6. Budget and checks
 - Evaluation budget: light, one fit cap and one wall-time cap; heavy, screens and scored fits per attempt plus
-  run-wide fit, wall-time and compute caps. An attempt is a unit of organisation, not of compute.
+  run-wide fit, wall-time and compute caps. An attempt is a unit of organisation, not of compute. A fit is one
+  optimizer run of one candidate on one training set (a K-fold score costs K fits; report candidates alongside);
+  wall time is elapsed time while the search runs, outages included and pauses for the user's review excluded.
+  Set aside a reserve for consolidation, reference refits and the final checks, kept out of the search budget.
 - Read `assets/checks.md`: its required items apply to every search; choose conditional ones by the cost of a wrong
   result, and record "N/A because …" for the rest.
 

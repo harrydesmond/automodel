@@ -80,8 +80,8 @@ Effort is the main control on output tokens: offer lower effort for mechanical d
   first from a measured pilot session, since unmeasured guesses have been several times too low; say which). Give agents the corresponding soft guide (calls per attempt, how often to end a
   phase) in COMMON_PROMPT.md. Do not spend significant effort pinning the estimate down, and never stop, cancel or
   disrupt agents for exceeding it: token use is hard to predict. A usage ceiling the user sets is different: honour
-  it through the size of the queued work and a deadline (`detached.md` §3), with the user's allowance readings
-  before and after the pilot as the conversion, never by interrupting an attempt. Report planned against actual after
+  it through the size of the queued work, with the user's allowance readings before and after the pilot as the
+  conversion, never by interrupting an attempt. Report planned against actual after
   every meta-iteration (§6) and use the difference to re-plan S, I, models, effort and the context rules (§7).
 - Measure total worker, supervisor, summary and review usage on this workload. Fresh attempt and phase sessions
   reduce repeated context; their start-up and hand-over cost is small by comparison but not zero.

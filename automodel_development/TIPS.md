@@ -3,7 +3,7 @@
 ## Uncertainty
 Use paired resampling for fixed-candidate comparisons, respecting groups and time order. Keep sampling, fitting and
 adaptive-selection uncertainty separate: bootstrap intervals or fold variation do not remove search optimism.
-Independent predictive claims may need an untouched check or nested evaluation (`checks.md`).
+Independent predictive claims may need an untouched check or nested evaluation (`phases/1_setup.md` §3–4).
 
 ## References
 Where informative and affordable, include simple baselines and a strong alternative from another model family.

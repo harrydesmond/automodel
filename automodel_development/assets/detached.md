@@ -21,8 +21,7 @@ not supervise attempts; each attempt is a fresh non-interactive session started 
    meta-iteration runs: when evaluations run on a cluster, or the user will be away, run it there as a job
    (`frameworks.md`, workers on another machine). Reviews need the meta-agent, so for an absence show the user what
    will run and what will sit idle, and let them choose: size the queued work (one meta-iteration, more attempts per
-   agent) to fill it, or accept the idle time. Set `AM_STOP_AT` to the end of the absence or to the time the stated
-   usage would run out, whichever is earlier: the launcher then creates `STOP`, so nothing new starts. Each attempt
+   agent) to fill it, or accept the idle time. Each attempt
    is a fresh non-interactive session; memory between attempts is the agent's `notes.md` (≤ 300 words) and
    `exchange.md` lists components others may import. With `job_state.sh`, an attempt is split into phase sessions:
    the worker submits work, writes `attempt_i/STATE.md` (≤ 150 words: pending work, how to collect it, next steps) and
@@ -43,6 +42,6 @@ not supervise attempts; each attempt is a fresh non-interactive session started 
    processes does not cancel queued jobs. A scheduler's "completed" is not
    success: the validator decides.
 4. Watch with `<skill>/scripts/worker_status.sh meta_m` at the agreed cadence (`frameworks.md`); `--wait <s>` returns
-   on launcher exit, failure or timeout (start it after the launcher has registered, or it returns at once). The
+   on launcher exit, failure or timeout (start it after the launcher has registered, or it returns at once; it works only on the launcher's machine). The
    status also shows each agent's latest `BLOCKER.md` line: deal with a blocker when it appears, since the agent
    reporting it is working around it. Review when all agents finish.

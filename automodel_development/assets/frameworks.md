@@ -25,7 +25,7 @@ from exposed tool choices or a verified model list; CLI `--model` accepts names 
 - **Waiting:** prefer phase sessions (`detached.md`), which end the session at a job boundary. Otherwise a
   foreground command blocks for at most 10 min, so a worker's long wait is a harness command that blocks ≈ 9.5 min
   (with the tool timeout at the maximum) and reports the job's state, repeated. In the interactive session, a background command that
-  returns when work is done (e.g. `worker_status.sh meta_m --wait <s>`) wakes the meta-agent with its completion
+  returns when work is done (e.g. `worker_status.sh meta_m --wait <s>`, when the launcher runs on this machine) wakes the meta-agent with its completion
   notice. Cache expiry can make longer gaps costlier; compare total cost.
 - **Usage:** completion notices give per-agent tokens and duration; `usage_report.py claude` reads the session logs
   (`~/.claude/projects/`). Local transcripts expire after some weeks: keep prompts and returns in the project. The
@@ -81,8 +81,9 @@ rather than setting it up again. Otherwise it needs:
 - One copy of the run state: while the launcher runs, the cluster tree's `meta_m/`, records, budget counter and
   `tools/` are authoritative, and the local project keeps the plan, `CONTEXT.md` and harness source. Copy the run state
   back (or review on the cluster) only after the launcher has ended, so that the two sides never write the same files.
-- Watching: run `worker_status.sh` on a login node of the same file system; everything but its process check works
-  there (that needs the launcher's node).
+- Watching: `worker_status.sh` checks the launcher's processes, so run it on the launcher's node, one check at a time,
+  as a short step inside the launcher's job (Slurm: `srun --jobid=<launcher job> --overlap <skill>/scripts/worker_status.sh
+  meta_m`). Never run its `--wait` on a login node: login nodes are for short commands and are rebooted.
 
 ## Other frameworks
 Fill in the same fields with the user. Without parallel sub-agents, use detached workers if there is a
