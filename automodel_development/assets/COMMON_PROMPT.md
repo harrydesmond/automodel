@@ -15,14 +15,15 @@ during the search and how they are checked>
 record a failure; the shared tools; where records (and any card) are and how to read them>
 
 ## Budget
-<this agent's share: screens and scored fits per attempt and in total; soft guide for model calls per attempt and
-per session>
+<this agent's share: screens and scored fits per attempt and in total; where the runtime reports usage, a soft guide
+for model calls per attempt and per session>
 
 ## An attempt
 <one structural modification from the parent, or the assigned bounded control (a convergence, recalibration or
 execution comparison, whose gains are recorded as such, not as discoveries); screen first if fits are expensive; it
-ends with its outcome recorded through the harness (result or failure, short rationale) and no job pending; continue
-from the better of attempt and parent or, in an exploratory direction, from a worse but valid candidate>
+is complete only with its outcome recorded through the harness (result or failure, short rationale) and no job
+pending, while a hand-off between sessions leaves state and receipts; continue from the better of attempt and parent
+or, in an exploratory direction, from a worse but valid candidate>
 
 ## Waiting and context
 <the rules of `resources.md` §3 that a worker can act on, with the soft guide for ending a session>

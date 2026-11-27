@@ -11,9 +11,11 @@ rather than setting it up again. Otherwise it needs:
   old sessions, and worker logs stay apart (`usage_report.py --home`, run where that home is). Log it in once, with
   the credential kept owner-only (the CLI's adapter).
 - A job script that runs the launcher in the foreground (a backgrounded launcher would end with the job script); its
-  scheduler time limit can enforce a hard wall-time limit of the plan. Keep the credential and the launcher job's
-  scheduler variables out of jobs that workers submit. A requeued job starts on fresh processes: its script removes
-  `meta_m/.lock` on restart (the lock records its host, so `--reclaim` elsewhere refuses).
+  scheduler time limit bounds the launcher and its sessions, not the jobs workers submit: a run-wide execution limit
+  also needs deadlines on those jobs, set from the remaining allowance, or cancellation from their receipts. Keep the
+  credential and the launcher job's scheduler variables out of jobs that workers submit. A requeued job starts on
+  fresh processes: its script removes `meta_m/.lock` on restart (the lock records its host, so `--reclaim` elsewhere
+  refuses).
 - One copy of the run state: while the launcher runs, the cluster tree's `meta_m/`, records, budget counter and
   `tools/` are authoritative, and the local project keeps the plan, `CONTEXT.md` and harness source. Copy the run
   state back (or review on the cluster) only after the launcher has ended, so that the two sides never write the same

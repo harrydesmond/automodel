@@ -16,10 +16,11 @@ verified list (`--model` accepts names but does not enumerate availability).
   `bypassPermissions` only if the user explicitly approves it. A `-p` session ends with its turn: a worker waits in
   the foreground and leaves no background job behind.
 - **Residual context:** by default a session also loads the user's personal instruction file, every instruction file
-  in the directories above it, auto-memory, user plugins, skills and MCP listings, which can double a worker's fixed
-  context and bring in unrelated rules; `CLAUDE.md` files in subfolders load when a worker reads files there. The
-  launcher turns these off, the project's own instruction files at any depth included (`launch_workers.sh` header);
-  `--bare` would do more but accepts only API-key authentication, not subscription logins.
+  in the directories above it, auto-memory, user plugins, skills and MCP listings, which roughly doubled a worker's
+  fixed context in our measurements (2.1.x) and brings in unrelated rules; `CLAUDE.md` files in subfolders load when
+  a worker reads files there. The launcher turns these off, the project's own instruction files at any depth included
+  (`launch_workers.sh` header); `--bare` would do more but accepts only API-key authentication, not subscription
+  logins.
 - **Waiting:** prefer phase sessions (`detached.md`), which end the session at a job boundary. Otherwise a foreground
   command blocks for at most 10 min, so a worker's long wait is a harness command that blocks ≈ 9.5 min (with the tool
   timeout at the maximum) and reports the job's state, repeated. In the interactive session, a background command
@@ -28,6 +29,9 @@ verified list (`--model` accepts names but does not enumerate availability).
 - **Usage:** completion notices give per-agent tokens and duration; `usage_report.py claude` reads the session logs
   (`~/.claude/projects/`, or `$CLAUDE_CONFIG_DIR`). Local transcripts expire after some weeks: keep prompts and
   returns in the project. The allowance reading (`/usage`) comes from the user.
+- **Usage log:** at each review run `python3 <skill>/scripts/usage_report.py claude --cwd <project> --since <launch>
+  --until <now>` (`--home <dir>` for a separate worker home; UTC times, e.g. the first `time` in
+  `meta_m/launch_manifest.jsonl`) into `meta_m/usage_log.jsonl`; its header explains what it counts.
 - **Known behaviour:** writes of report-like files by sub-agents are sometimes refused; have them return the text
   (within the summary limit: it enters your context) and save it yourself. A usage-limit stop ends all running
   in-session sub-agents at once: resume each with SendMessage after the reset, harvesting pending jobs first. Detached

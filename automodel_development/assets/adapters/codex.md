@@ -17,11 +17,14 @@ Re-check flags and limits with `--help` and the exposed tools when planning, and
   model call). The launcher turns off the user config, memories and project instruction files (`launch_workers.sh`
   header) and passes `WORKER_RULES.md` as developer instructions; the personal `AGENTS.md` and user skills go only
   with a separate `CODEX_HOME` (`cluster.md`), which cuts a worker's fixed prompt by about a third.
-- **Waiting:** inspect active tools and instructions. Observed maxima: `sleep` 12 h, `wait_agent` 1 h,
-  `exec_command` yield 30 s, empty `write_stdin` poll 5 min. Observed sessions discouraged blocking waits over 60 s;
-  workers mostly kept short sleeps despite longer-wait prompts, with almost all repeated input cached. Set cadences
-  within applicable limits; assess cost using `resources.md` §3.
+- **Waiting:** inspect active tools and instructions. Observed maxima: `sleep` 12 h, `wait_agent` 1 h, `exec_command`
+  yield 30 s, empty `write_stdin` poll 5 min. In observed sessions (0.167) the tools discouraged blocking waits over
+  60 s, and workers mostly kept short sleeps despite longer-wait prompts, with almost all repeated input cached. Set
+  cadences within applicable limits; assess cost using `resources.md` §3.
 - **Usage:** `usage_report.py codex` reads local session logs (`$CODEX_HOME` or `~/.codex`); check coverage against
   launched sessions. Allowance readings come from the user.
+- **Usage log:** at each review run `python3 <skill>/scripts/usage_report.py codex --cwd <project> --since <launch>
+  --until <now>` (`--home <dir>` for a separate worker home; UTC times, e.g. the first `time` in
+  `meta_m/launch_manifest.jsonl`) into `meta_m/usage_log.jsonl`; its header explains what it counts.
 - **Login on another machine** (`cluster.md`): `codex login` with `CODEX_HOME` set to the separate worker home
   (`--device-auth` on a machine without a browser), in a terminal rather than through an agent.

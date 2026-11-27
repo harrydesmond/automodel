@@ -49,8 +49,8 @@
 #   Both are split like shell words: quote an argument that contains spaces; no globbing or substitution.
 # Other environment: AM_ATTEMPTS (5), AM_RETRY_WAIT (s, 1800), AM_MAX_TRIES (8), AM_STAGGER (s between agents, 20),
 #   AM_LIMIT_WAIT (s, 1200), AM_LIMIT_MAX_H (192), AM_JOB_POLL (s, 120), AM_JOB_WAIT_MAX_H (72), AM_MAX_PHASES (20 per
-#   attempt), AM_SESSION_CALLS (50: model calls after which a worker hands over to a fresh session), AM_ISOLATE (1),
-#   AM_WORKER_PROJECT_MD (0).
+#   attempt), AM_SESSION_CALLS (50: advisory session length stated in the worker prompt; calls are not counted),
+#   AM_ISOLATE (1), AM_WORKER_PROJECT_MD (0).
 # Exit status: 0 all agents finished, 1 failures (see failed.log), 3 stopped by STOP.
 set -u
 META=${1:?usage: launch_workers.sh <meta_dir> [agents...]}; shift

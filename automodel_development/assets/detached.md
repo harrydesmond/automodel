@@ -34,8 +34,9 @@ not supervise attempts; each attempt is a fresh non-interactive session started 
    launcher and its worker groups are gone. Before relaunching, check each `.job` receipt with the scheduler: a
    finished job is collected by that agent's resume session (its `STATE.md` says how), so harvest it yourself only if
    there is no `STATE.md`, and never resubmit a job whose receipt is uncertain. Stopping local processes does not
-   cancel queued jobs; a cancellation (`SKILL.md`) cancels them from their receipts. A scheduler's "completed" is not
-   success: the validator decides.
+   cancel queued jobs; a cancellation (`SKILL.md`) cancels them from their receipts. After a stop the launcher starts
+   no session, resumptions included: collect finished jobs through the harness from their receipts, or record them as
+   pending. A scheduler's "completed" is not success: the validator decides.
 6. **Watching.** Run `<skill>/scripts/worker_status.sh meta_m` at the agreed cadence (adapter; on a cluster,
    `adapters/cluster.md`); `--wait <s>` returns on launcher exit, failure or timeout (start it after the launcher has
    registered, or it returns at once; it works only on the launcher's machine). The status shows each agent's latest

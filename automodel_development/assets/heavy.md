@@ -23,19 +23,18 @@ own file (`detached.md`).
   outputs atomically (temporary file, then rename); harvesting records a missing, unreadable, empty or truncated
   output as a failed work unit with its reason and carries on, since stopping on one would block the attempt.
 
-## 2. Models and effort
+## 2. Models and effort (where the runtime exposes them)
 Start with the session's model and the simplest execution path. When measured cost or quality warrants it, offer
 other allocations as options to test, with their estimated cost and uncertainty: a cheaper model for mechanical
 directions, the strongest for directions that must diagnose failures and overturn their brief, or fewer agents at a
 higher level. Name concrete models (adapter), not tiers; none of these allocations has been compared under controlled
-conditions. Effort mainly changes output (reasoning) tokens: offer lower effort for mechanical directions and check
-its effect in the usage log.
+conditions. Effort settings mainly change output tokens: offer lower effort for mechanical directions and check the
+effect in the usage log.
 
 ## 3. Usage log
-At each review run `python3 <skill>/scripts/usage_report.py <claude|codex> --cwd <project> --since <launch> --until
-<now>` (`--home <dir>` for a separate agent home; times in UTC, e.g. the first `time` in
-`meta_m/launch_manifest.jsonl`) into `meta_m/usage_log.jsonl`; its header explains what it counts. Add per agent:
-proposals, screens, scored fits, attempts validated and quarantined, gain over its seed, wall time. Put a summary line
-in `CONTEXT.md` (allowance readings unknown unless the user supplies them), and in each progress message the token
-budget against actual use (total and per agent; calls and median context as the drivers) and what the next
-meta-iteration will change because of it.
+At each review record per direction: proposals, screens, scored fits, attempts validated and quarantined, gain over
+its seed, wall time and compute, plus the usage the runtime exposes (calls, context, input, cache, output) and its
+coverage; unavailable fields are unknown, not zero (the adapters say how to collect it). Put a
+summary line in `CONTEXT.md` (allowance readings unknown unless the user supplies them) and, in each progress message,
+usage against the token budget and what the next meta-iteration will change because of it. Missing telemetry does not
+block a search; a usage cap without it is an estimate (`resources.md` §4).
