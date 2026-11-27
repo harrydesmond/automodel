@@ -10,12 +10,12 @@ Reuse explicit answers and delegation; ask the open questions together and follo
 (`SKILL.md`).
 
 ## 0. Feasibility and size
-Inspect the runtime, libraries, tools and delegation (`resources.md` §§1–2). Decide which data are reserved before any
-scoring. Time a cheap evaluation, otherwise estimate it, and classify the search. Heavy: read `heavy.md` and the
+Inspect the runtime, libraries, tools and delegation (`resources.md` §§1–2). Decide which data are reserved before
+any scoring. Time a cheap evaluation, otherwise estimate it, and classify the search. Heavy: read `heavy.md` and the
 applicable adapters; agree the limits on usage, wall time and compute, which are hard, and how each is enforced.
-Detached: read `detached.md`, run `<skill>/scripts/tests/run_tests.sh` on the launcher's intended host (for a cluster,
-in a short job on that kind of node), and agree permissions and any unattended period. If unsupported, use a simpler
-path.
+Detached: read `detached.md`; with the supplied launcher, run its fixture suite `<skill>/scripts/tests/run_tests.sh`
+on the intended host (for a cluster, in a short job on that kind of node); agree permissions and any unattended
+period. If unsupported, use a simpler path.
 
 ## 1. Goal and claims
 Agree the terminology, what the model is for (input range, extrapolation, derivatives, runtime or interpretability),

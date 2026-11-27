@@ -34,7 +34,8 @@ effect in the usage log.
 ## 3. Usage log
 At each review record per direction: proposals, screens, scored fits, attempts validated and quarantined, gain over
 its seed, wall time and compute, plus the usage the runtime exposes (calls, context, input, cache, output) and its
-coverage; unavailable fields are unknown, not zero (the adapters say how to collect it). Put a
-summary line in `CONTEXT.md` (allowance readings unknown unless the user supplies them) and, in each progress message,
-usage against the token budget and what the next meta-iteration will change because of it. Missing telemetry does not
-block a search; a usage cap without it is an estimate (`resources.md` §4).
+coverage; unavailable fields are unknown, not zero (the adapters say how to collect it). Put a summary line in
+`CONTEXT.md` (allowance readings unknown unless the user supplies them) and, in each progress message, usage against
+the token budget and what the next meta-iteration will change because of it. Missing telemetry does not block a
+search. Whether a usage cap is enforceable depends on an enforcement mechanism, not on telemetry; without one it is
+an estimate (`resources.md` §4).

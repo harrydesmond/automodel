@@ -14,8 +14,8 @@ configuration), fits, scores and records it under the plan. Test each applicable
 - An append-only, atomic record per fit (screens, failures, refits and rescores included): stable candidate and fit
   IDs, proposer, stage, status, model, data and protocol identities, settings, seed, fitted state or an immutable
   reference to it, metrics, stop reason and a brief rationale. One collector reconciles counts and generates tables.
-  Light: one append-only results file suffices, and an attempt is validated when it holds a scored fit or a recorded
-  failure, eligible or not.
+  Light: one append-only results file suffices; an attempt is validated only once every required result or failure is
+  recorded and no job remains pending. Eligibility is checked separately.
 - Charge fits at submission, every restart and failure included. Enforce the allocation and `STOP` (in the active
   `meta_m/` or the project root); concurrent workers and hooks share atomic reservations, and a central evaluator may
   enforce this directly. After a cutoff, admit no new evaluations but harvest admitted work.

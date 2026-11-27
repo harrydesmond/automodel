@@ -2,7 +2,7 @@
 name: iterate
 entry: Phase 2 done and the search plan approved; status says Phase 3 (resume the active meta-iteration from its recorded state).
 exit: The search has ended (stop rule, budget, M or the user), CONTEXT.md records the finalists and the primary candidate (or that no eligible candidate exists), and the user has confirmed the search is complete.
-description: Third and main phase. Run M meta-iterations of S parallel agents making I sequential structural modifications each (in-session sub-agents, or detached workers for heavy searches), within the approved budget; review, report progress, re-plan and repeat.
+description: Third and main phase. Run M meta-iterations of S directions with I attempts or proposal rounds each, using the approved execution mode; review, report and re-plan within budget.
 ---
 
 # Phase 3 — Iterate

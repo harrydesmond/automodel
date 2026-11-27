@@ -16,8 +16,9 @@ not supervise attempts; each attempt is a fresh non-interactive session started 
    into `meta_m/WORKER_RULES.md` every rule from the user's and the project's instruction files that binds workers
    (resource limits, data access, scientific conventions, forbidden actions), end it with a list of the rules left
    out and why, and show both to the user with the permissions; the pilot checks that the carried rules reached the
-   worker. The launcher needs bash ≥ 4, `setsid` and GNU coreutils (`tests/run_tests.sh` checks a machine). If the
-   approved configuration is unavailable, run in-session or sequentially instead.
+   worker. The launcher needs bash ≥ 4, `setsid` and GNU coreutils (`tests/run_tests.sh` checks the launcher script
+   and the host's prerequisites; the real pilot checks it with the installed agent CLI). If the approved
+   configuration is unavailable, run in-session or sequentially instead.
 3. **Launch.** From a session whose processes may outlive their command (adapter), use a validated project launcher
    with this contract, or `setsid nohup <skill>/scripts/launch_workers.sh meta_m >> meta_m/launch.log 2>&1 <
    /dev/null &` (append, so a relaunch keeps the earlier log). The launcher must outlive the user's session for as

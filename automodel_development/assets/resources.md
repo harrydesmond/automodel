@@ -13,14 +13,14 @@ worker capacity; permitted tools, write roots and network access; the completion
 recovery and cancellation of owned work; and the model, effort and usage controls available. Assume nothing the runtime
 does not expose.
 - **In-session:** independent briefs, run in parallel within capacity, reviewed on completion; fresh agents each
-  meta-iteration where supported (an agent re-reads its growing context at every wake-up).
+  meta-iteration where supported.
 - **Detached:** for long work, `detached.md` and the applicable adapter. The supplied Linux launcher covers the
   runtimes that have adapters; another runtime needs a compatible adapter or project launcher.
 - **Sequential:** without delegation, work the S directions in turn in this session, each with its own notes and
   records and one shared budget, then review as usual. Record that they shared context and were not independent.
 
 ## 3. Waiting and context (worker briefs)
-Cost grows with model calls × context per call. Measure calls, context, cached and uncached input, output, latency
+Measure calls, context, cached and uncached input, output, latency
 and useful work where reported; the defaults below are starting points, revised after the pilot and each review.
 - Do not poll from a model session where a non-model wait exists. Prefer, in order: sessions that end at job
   boundaries, completion notifications, watchers that do not wake the model, blocking waits; otherwise check rarely,
@@ -46,18 +46,20 @@ the plan is an estimate (reported and revised), a submission cutoff (new work re
 execution limit (owned work stopped at the limit, checkpointed if possible). Reserve outstanding commitments before
 admitting work. An execution limit needs a mechanism covering every affected job, not only the launcher: deadlines set
 from the remaining allowance, or a controller that cancels from receipts. Without one, describe the limit as a cutoff
-or an estimate, not a hard deadline. A limit the user sets as hard overrides the rule against disrupting work.
+or an estimate, not a hard deadline.
 
-A usage allowance that cannot be read during the run is controlled only through the amount of work queued, chosen
-conservatively from the user's readings around the pilot; this is an estimate, not a strict bound, since retries and
-resumptions after resets can draw more. Explain what can be enforced before approval. Do not convert tokens into
-money or allowance without the user's prices or readings.
+Without a mechanism that enforces it (a provider quota, say, which can exist without readable usage), a usage
+allowance is controlled only through the amount of work queued, chosen conservatively from the user's readings around
+the pilot; this is an estimate, not a strict bound, since retries and resumptions after resets can draw more. Explain
+what can be enforced before approval. Do not convert tokens into money or allowance without the user's prices or
+readings.
 
 Estimate representative attempts plus setup, review, finalization and contingency; state unknowns; update after the
-first meta-iteration. Usage ≈ S × I × usage per attempt + orchestration; wall time ≈ the slowest chain (agent work,
-queue, evaluations, noticing) + review; compute ≈ fits × cost. Heavy: estimate tokens from the measured pilot or the
-last meta-iteration (calls × typical context), give workers a soft guide and report observed use; never interrupt an
-agent for exceeding an estimate. Without telemetry, use fit counts, elapsed time and available costs (`heavy.md` §3).
+first meta-iteration. Usage ≈ S × I × usage per attempt + orchestration; wall time from the actual execution schedule
+(sequential directions add up; limited capacity runs in waves), including queueing, noticing and review; compute ≈
+fits × cost. Heavy: estimate tokens from the measured pilot or the last meta-iteration (calls × typical context),
+give workers a soft guide and report observed use; never interrupt an agent for exceeding an estimate. Without
+telemetry, use fit counts, elapsed time and available costs (`heavy.md` §3).
 
 ## 5. Re-plan at boundaries
 Use results and measured costs to adjust directions, seeds, S, I, allocations and session guides. Retire directions

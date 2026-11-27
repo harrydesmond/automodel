@@ -129,6 +129,9 @@ csetup; printf '#!/bin/sh\nf="$1/.running"; [ -f "$f" ] || exit 2\nn=$(cat "$f")
 rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_JOB_POLL=0 AM_MAX_TRIES=1 run 1)
 check "phase sessions: end at a job, resume when it finishes, no retry spent" '[ "$rc" = 0 ] && [ -f meta_1/agent_1/attempt_1/result.json ] && grep -q "resumes after jobs" meta_1/agent_1/sessions.log'
 check "phase sessions: the resume session gets the resume prompt and the hand-off rule" 'grep -q "Resume attempt 1" "$T/prompts" && grep -q "end the session" "$T/prompts"'
+csetup; printf '#!/bin/sh\ntouch meta_1/STOP; exit 0\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
+rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_JOB_POLL=0 AM_MAX_TRIES=1 run 1)
+check "STOP while a job is pending: exit 3, no resume session, state and receipt kept" '[ "$rc" = 3 ] && ! grep -q "Resume attempt" "$T/prompts" && [ -f meta_1/agent_1/attempt_1/STATE.md ] && [ -f meta_1/agent_1/attempt_1/.running ] && grep -rq "STOP while jobs run" meta_1'
 csetup; printf '#!/bin/sh\nexit 1\n' > meta_1/job_state.sh; chmod +x meta_1/job_state.sh
 rc=$(FAKE_MODE=stuck AM_JOB_POLL=0 AM_RETRY_WAIT=0 AM_MAX_TRIES=2 run 1)
 check "phase sessions: repeatedly uncollected results spend retries, not free phases" '[ "$rc" = 1 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 3 ]'

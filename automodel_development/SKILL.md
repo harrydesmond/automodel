@@ -46,11 +46,12 @@ This section is the one authority on approval, selection, completion, stopping a
   (default: light continues, heavy pauses).
 - **Endings.** A planned end (stop rule, M, or search allocation spent) opens consolidation; Phase 4 opens the
   protected final-check allocation. A stop (the user asks to stop) takes effect before any further submission: create
-  `STOP` in the active `meta_m/` (the launcher and harness check it). Admitted work finishes; collect it through the
-  harness from its receipts, or record the receipts as pending. Consolidation or final checks after a stop need the
-  user's go-ahead; then remove `STOP` first. A cancellation (user request, or an execution limit, `resources.md` §4)
-  also ends owned sessions and cancels owned jobs from their receipts; record losses and verify cleanup. A submission
-  cutoff cancels no admitted work.
+  `STOP` in the active `meta_m/` during a meta-iteration (the launcher and harness check it), otherwise in the
+  project root (the harness checks it). Admitted work finishes; collect it through the harness from its receipts, or
+  record the receipts as pending. Consolidation or final checks after a stop need the user's go-ahead; then remove
+  `STOP` first. A cancellation (user request, or an execution limit, `resources.md` §4) also ends owned sessions and
+  cancels owned jobs from their receipts; record losses and verify cleanup. A submission cutoff cancels no admitted
+  work.
 - **Checkpoint.** Update `CONTEXT.md` at phase and review boundaries. Refresh or compact your context when it grows
   large, with the runtime's mechanism, asking the user only where they must act.
 
