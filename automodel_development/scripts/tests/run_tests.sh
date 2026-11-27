@@ -5,6 +5,7 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd); S=$HERE/..; T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin"; cp "$HERE/fake_codex" "$T/bin/codex"; cp "$HERE/fake_claude" "$T/bin/claude"; chmod +x "$T/bin/codex" "$T/bin/claude"
 export PATH="$T/bin:$PATH"
+unset CODEX_HOME CLAUDE_CONFIG_DIR; for v in $(compgen -v AM_); do unset "$v"; done   # no settings from the caller
 export AM_RETRY_WAIT=0 AM_MAX_TRIES=2 AM_STAGGER=0
 pass=0; failn=0
 check() { if eval "$2"; then pass=$((pass+1)); echo "ok   $1"; else failn=$((failn+1)); echo "FAIL $1"; fi; }
@@ -133,6 +134,8 @@ rc=$(FAKE_MODE=stuck AM_JOB_POLL=0 AM_RETRY_WAIT=0 AM_MAX_TRIES=2 run 1)
 check "phase sessions: repeatedly uncollected results spend retries, not free phases" '[ "$rc" = 1 ] && [ "$(grep -c "session exit" meta_1/agent_1/sessions.log)" = 3 ]'
 csetup; rc=$(FAKE_MODE=phased FAKE_PROMPTS=$T/prompts AM_MAX_TRIES=1 run 1)
 check "voluntary hand-off (fresh STATE.md, no job pending) resumes without spending a retry" '[ "$rc" = 0 ] && grep -q "handed over to a fresh session" meta_1/agent_1/sessions.log && grep -q "Resume attempt 1" "$T/prompts"'
+csetup; rc=$(FAKE_PROMPTS=$T/prompts AM_SESSION_CALLS=37 run 1)
+check "session length from AM_SESSION_CALLS reaches the worker prompt" '[ "$rc" = 0 ] && grep -q "about 37 model calls" "$T/prompts"'
 csetup; AM_CLAUDE_FLAGS="--allowedTools 'Bash(python3 harness/submit.py:*)' Read" rc=$(FAKE_ARGS=$T/args run 1)
 check "permission flags keep quoted rules with spaces as one argument" '[ "$rc" = 0 ] && grep -qxF "Bash(python3 harness/submit.py:*)" "$T/args" && grep -qx "Read" "$T/args"'
 csetup; AM_CLAUDE_FLAGS="--allowedTools 'Bash(x" rc=$(run 1); check "unbalanced quotes in permission flags are refused" '[ "$rc" = 1 ] && grep -q "unbalanced quotes" meta_1/launch.log'

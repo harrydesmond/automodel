@@ -19,7 +19,7 @@ Start a session in your project and say e.g. "use automodel-development to find 
 - `scripts/usage_report.py claude|codex --cwd <project> --since <time>` summarises token usage from session logs.
 
 ## What to send back
-Process records only, no data: `CONTEXT.md`, `CHECKLIST.md`, the `meta_*/agent_*/summary.md` and `evaluation.md` files
+Process records only, no data: `CONTEXT.md`, `RUN_PLAN.md`, the `meta_*/agent_*/summary.md` and `meta_*/review.md` files
 (or the run folder zipped without data), the `usage_report.py` output, and three short answers:
 1. What did you have to add or work around?
 2. What went wrong or had to be redone, and when was it noticed?

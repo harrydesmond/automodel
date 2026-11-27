@@ -49,7 +49,8 @@
 #   Both are split like shell words: quote an argument that contains spaces; no globbing or substitution.
 # Other environment: AM_ATTEMPTS (5), AM_RETRY_WAIT (s, 1800), AM_MAX_TRIES (8), AM_STAGGER (s between agents, 20),
 #   AM_LIMIT_WAIT (s, 1200), AM_LIMIT_MAX_H (192), AM_JOB_POLL (s, 120), AM_JOB_WAIT_MAX_H (72), AM_MAX_PHASES (20 per
-#   attempt), AM_ISOLATE (1), AM_WORKER_PROJECT_MD (0).
+#   attempt), AM_SESSION_CALLS (50: model calls after which a worker hands over to a fresh session), AM_ISOLATE (1),
+#   AM_WORKER_PROJECT_MD (0).
 # Exit status: 0 all agents finished, 1 failures (see failed.log), 3 stopped by STOP.
 set -u
 META=${1:?usage: launch_workers.sh <meta_dir> [agents...]}; shift
@@ -57,6 +58,7 @@ META=${META%/}
 ROOT=$PWD; RETRY_WAIT=${AM_RETRY_WAIT:-1800}; MAX_TRIES=${AM_MAX_TRIES:-8}; STAGGER=${AM_STAGGER:-20}
 LIMIT_WAIT=${AM_LIMIT_WAIT:-1200}; LIMIT_MAX=$(( ${AM_LIMIT_MAX_H:-192} * 3600 ))
 JOB_POLL=${AM_JOB_POLL:-120}; JOB_MAX=$(( ${AM_JOB_WAIT_MAX_H:-72} * 3600 )); MAX_PHASES=${AM_MAX_PHASES:-20}
+SESSION_CALLS=${AM_SESSION_CALLS:-50}
 MANIFEST=$META/launch_manifest.jsonl
 TOKENS=(); [ -n "${AM_CLAUDE_TOKENS:-}" ] && IFS=: read -r -a TOKENS <<< "$AM_CLAUDE_TOKENS"
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
@@ -279,8 +281,9 @@ agent_loop() {
         fin="Count every fit against the stated budget. If $a/.job exists, an evaluation is already running or finished: \
 harvest it as COMMON_PROMPT.md describes and never resubmit it. If $META/STOP appears, submit nothing new. Finish only \
 when $a holds a complete result (the harness's validator passes), no job of yours is pending, $d/notes.md is updated \
-(<= 300 words: current best, what worked, queue of next hypotheses) and $d/exchange.md lists any component worth \
-sharing (file, parameter map, effect). If this session grows long (about 50 model calls) before the attempt is \
+(<= 300 words: current best with its record IDs, what worked, assumptions, unresolved failures, queue of next \
+hypotheses) and $d/exchange.md lists any component worth \
+sharing (file, parameter map, effect). If this session grows long (about $SESSION_CALLS model calls) before the attempt is \
 complete, write $a/STATE.md (<= 150 words: what is done, what to do next) and end the session; a fresh session continues \
 from it. Final reply: at most three lines."
         ph=""; [ -n "$JOBHOOK" ] && ph=" Do not wait for cluster jobs in this session: once you have submitted work and \
@@ -311,7 +314,7 @@ $d/DIRECTION.md, $d/notes.md and every attempt's record, then write $d/summary.m
 echo "$(date '+%F %T') launching agents: $AGENTS"
 rm -f "$META/failed.log"
 set +m
-BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES JOBHOOK ISO CISO CF XF MANIFEST CLI MODEL EFFORT NATT TOKENS)
+BOOT="$(declare -p META ROOT RETRY_WAIT MAX_TRIES LIMIT_WAIT LIMIT_MAX JOB_POLL JOB_MAX MAX_PHASES SESSION_CALLS JOBHOOK ISO CISO CF XF MANIFEST CLI MODEL EFFORT NATT TOKENS)
 $(declare -f log manifest fail run_session token_pick token_mark token_wait claude_tok limit_hit session_until agent_loop)"
 for s in $AGENTS; do
     setsid bash -c "$BOOT"$'\n''agent_loop "$1"' automodel-worker "$s" &
